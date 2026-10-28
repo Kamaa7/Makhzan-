@@ -7,11 +7,13 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test:currency": "npx --yes tsx ./scripts/assert-currency.ts"
+    "test:currency": "npx --yes tsx ./scripts/assert-currency.ts",
+    "test:draft": "npx --yes tsx ./scripts/assert-draft.ts"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.10",
     "@heroicons/react": "^2.2.0",
+    "jsbarcode": "^3.12.3",
     "jspdf": "^2.5.2",
     "jspdf-autotable": "^3.8.4",
     "lucide-react": "^0.487.0",

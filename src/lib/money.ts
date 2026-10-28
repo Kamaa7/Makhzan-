@@ -174,12 +174,26 @@ export type SaleTotals = {
   subtotal: bigint;
   taxRaw: bigint;
   taxTotal: bigint;
+  exactTotal: bigint;
   grandTotal: bigint;
+  roundOff: bigint;
 };
+
+/** One whole major unit in minor units: 100 for 2-decimal currencies, 1000 for 3-decimal. */
+export function roundOffStep(currency?: string | null): bigint {
+  return getCurrency(currency).decimals === 3 ? 1000n : 100n;
+}
+
+/** Round `exact` to the nearest `step` using the same half-away-from-zero rule as pgRoundInt. */
+export function roundToNearestStep(exact: bigint, step: bigint): bigint {
+  if (step <= 0n) return exact;
+  return pgRoundInt(Number(exact) / Number(step)) * step;
+}
 
 export function computeSaleTotals(
   lines: { qty: number; unitPrice: bigint; taxRate: number }[],
   discount: bigint,
+  currency = "INR",
 ): SaleTotals {
   let subtotal = 0n;
   let taxRaw = 0n;
@@ -190,6 +204,8 @@ export function computeSaleTotals(
   }
   const taxTotal =
     subtotal === 0n ? 0n : pgRoundInt((Number(taxRaw) * Number(subtotal - discount)) / Number(subtotal));
-  const grandTotal = subtotal - discount + taxTotal;
-  return { subtotal, taxRaw, taxTotal, grandTotal };
+  const exactTotal = subtotal - discount + taxTotal;
+  const grandTotal = roundToNearestStep(exactTotal, roundOffStep(currency));
+  const roundOff = grandTotal - exactTotal;
+  return { subtotal, taxRaw, taxTotal, exactTotal, grandTotal, roundOff };
 }

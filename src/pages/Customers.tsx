@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from "react";
 import { useNavigate } from "react-router-dom";
+import { Bi } from "../components/Bi";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { EmptyState } from "../components/EmptyState";
 import { Modal } from "../components/Modal";
@@ -138,13 +139,24 @@ export function Customers() {
             <tbody>
               {rows.map((c) => (
                 <tr key={c.id} className="border-t border-gray-100">
-                  <td className="px-3 py-2 font-medium">{c.name}</td>
+                  <td className="px-3 py-2 font-medium">
+                    <button type="button" className="text-left hover:underline" onClick={() => navigate(`/customers/${c.id}`)}>
+                      {c.name}
+                    </button>
+                  </td>
                   <td className="px-3 py-2">{c.phone || "—"}</td>
                   <td className="px-3 py-2">{c.gstin || "—"}</td>
                   <td className="px-3 py-2 text-right">{c.due > 0n ? formatMoney(c.due, currency) : "—"}</td>
                   <td className="px-3 py-2 text-right">
                     <button type="button" className="btn-ghost text-xs" onClick={() => setEditor(c)}>
                       Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost text-xs"
+                      onClick={() => navigate(`/customers/${c.id}`)}
+                    >
+                      <Bi k="statement" />
                     </button>
                     <button
                       type="button"

@@ -1,4 +1,13 @@
-export { initDb, persistDb, downloadDbFile, replaceDb } from "./engine";
+export {
+  initDb,
+  persistDb,
+  downloadDbFile,
+  replaceDb,
+  refreshAutoBackup,
+  saveKeeperBackup,
+  readLastBackupAt,
+  formatLastBackupAt,
+} from "./engine";
 export { signIn, signUp, signOut, restoreSession, requireUserId } from "./auth";
 export {
   ensureStoreProfile,
@@ -23,8 +32,11 @@ export {
   getSale,
   listSaleItems,
   listSalePayments,
+  listCustomerPayments,
+  getDayCloseStats,
   getHomeStats,
 } from "./repo";
+export type { CustomerPaymentRow } from "./repo";
 export { createSale, recordSalePayment, adjustStock } from "./rpc";
 export type { SaleLineInput } from "./rpc";
 export type { ProductWrite, CustomerWrite } from "./repo";

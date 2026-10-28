@@ -59,6 +59,7 @@ export function mapSale(row: Record<string, unknown>): Sale {
     subtotal: Number(row.subtotal),
     discount: Number(row.discount),
     tax_total: Number(row.tax_total),
+    round_off: Number(row.round_off ?? 0),
     grand_total: Number(row.grand_total),
     amount_paid: Number(row.amount_paid),
     payment_method: row.payment_method as Sale["payment_method"],

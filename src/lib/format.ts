@@ -4,11 +4,21 @@ export function formatQty(qty: number): string {
 }
 
 export function todayISO(): string {
-  const d = new Date();
+  return localDateISO(new Date());
+}
+
+export function localDateISO(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+/** Shop-local calendar date from an ISO timestamp. */
+export function isoToLocalDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  return localDateISO(d);
 }
 
 export function monthStartISO(): string {

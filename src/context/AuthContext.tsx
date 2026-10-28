@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ensureStoreProfile, emptyProfile, restoreSession, signIn as dbSignIn, signOut as dbSignOut, signUp as dbSignUp } from "../db";
+import { clearSaleDraft } from "../lib/saleDraft";
 import type { AuthSession, AuthUser, StoreProfile } from "../lib/types";
 import { useDb } from "./DbContext";
 
@@ -81,6 +82,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await applySession(await dbSignUp(email, password));
       },
       signOut: async () => {
+        const uid = session?.user.id;
+        if (uid) clearSaleDraft(uid);
         await dbSignOut();
         await applySession(null);
       },

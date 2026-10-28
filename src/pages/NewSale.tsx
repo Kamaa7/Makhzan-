@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Bi } from "../components/Bi";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ShortcutHint } from "../components/ShortcutsDialog";
 import { MoneyInput, PageHeader, WarningBanner } from "../components/ui";
@@ -7,7 +8,7 @@ import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
 import { useShortcuts } from "../hooks/useShortcuts";
-import { isCtrlEnter, isDialogOpen, isEscape, isFKey } from "../lib/shortcuts";
+import { isAltLetter, isCtrlEnter, isDialogOpen, isEscape, isFKey } from "../lib/shortcuts";
 import { PAYMENT_METHODS } from "../lib/constants";
 import { formatQty, newId, todayISO } from "../lib/format";
 import {
@@ -20,15 +21,26 @@ import {
   parseMajorInputSafe,
   paiseToRupeesNumber,
 } from "../lib/money";
-import { createSale, listActiveProducts, listCustomers } from "../db";
+import { createSale, getSale, listActiveProducts, listCustomers } from "../db";
+import { getLastSaleId, setLastSaleId } from "../lib/lastSale";
+import { listParkedBills, parkBill, takeParkedBill, type ParkedBill } from "../lib/parkedBills";
+import { clearSaleDraft, loadSaleDraft, saveSaleDraft, type SaleDraft } from "../lib/saleDraft";
 import type { CounterLine, Customer, DocType, PaymentMethod, Product } from "../lib/types";
 
+function isKeeperField(el: EventTarget | null, scanEl: HTMLElement | null): boolean {
+  if (!(el instanceof HTMLElement) || el === scanEl) return false;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+}
+
 export function NewSale() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const currency = profile?.currency || "INR";
+  const userId = user?.id ?? "";
   const scanRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const discountRef = useRef<HTMLInputElement>(null);
@@ -46,9 +58,16 @@ export function NewSale() {
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [saleDate, setSaleDate] = useState(todayISO());
   const [notes, setNotes] = useState("");
+  const [cashReceivedRaw, setCashReceivedRaw] = useState("");
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
+  const [restoredDraft, setRestoredDraft] = useState(false);
+  const [scannerReady, setScannerReady] = useState(true);
+  const [parked, setParked] = useState<ParkedBill[]>([]);
+  const [resumeTarget, setResumeTarget] = useState<ParkedBill | null>(null);
+  const [lastSaleId, setLastSaleIdState] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -60,15 +79,46 @@ export function NewSale() {
   }, [push]);
 
   useEffect(() => {
+    if (!userId) {
+      setDraftReady(true);
+      return;
+    }
+    const draft = loadSaleDraft(userId);
+    if (draft) {
+      setDocType(draft.docType);
+      setCustomerId(draft.customerId);
+      setWalkInName(draft.walkInName);
+      setWalkInPhone(draft.walkInPhone);
+      setLines(draft.lines);
+      setDiscountRaw(draft.discountRaw);
+      setPaidRaw(draft.paidRaw);
+      setMethod(draft.method);
+      if (draft.saleDate) setSaleDate(draft.saleDate);
+      setNotes(draft.notes);
+      setCashReceivedRaw(draft.cashReceivedRaw);
+      setRestoredDraft(true);
+    }
+    setParked(listParkedBills(userId));
+    const lastId = getLastSaleId(userId);
+    setLastSaleIdState(lastId && getSale(lastId) ? lastId : null);
+    setDraftReady(true);
+  }, [userId]);
+
+  useEffect(() => {
+    if (!draftReady || restoredDraft) return;
     if (params.get("customer")) setDocType("bill");
-  }, [params]);
+  }, [params, draftReady, restoredDraft]);
 
   const selectedCustomer = customers.find((c) => c.id === customerId) ?? null;
 
   const discount = parseMajorInputSafe(discountRaw, currency);
-  const totals = useMemo(() => computeSaleTotals(lines, discount), [lines, discount]);
-  const due =
-    totals.grandTotal - (docType === "cash_memo" ? totals.grandTotal : parseMajorInputSafe(paidRaw, currency));
+  const totals = useMemo(() => computeSaleTotals(lines, discount, currency), [lines, discount, currency]);
+  const paidNow = docType === "cash_memo" ? totals.grandTotal : parseMajorInputSafe(paidRaw, currency);
+  const due = totals.grandTotal - paidNow;
+  const cashReceivedFilled = method === "cash" && cashReceivedRaw.trim() !== "";
+  const cashReceived = cashReceivedFilled ? parseMajorInputSafe(cashReceivedRaw, currency) : null;
+  const changeVs = docType === "cash_memo" ? totals.grandTotal : paidNow;
+  const cashDelta = cashReceived == null ? null : cashReceived - changeVs;
 
   const addProduct = (product: Product, beepName = true) => {
     setLines((prev) => {
@@ -124,11 +174,31 @@ export function NewSale() {
   useBarcodeScanner(onScan, true);
 
   useEffect(() => {
-    const id = window.setInterval(() => {
+    const syncHint = () => {
       const el = document.activeElement;
-      if (el === document.body || el === scanRef.current) scanRef.current?.focus();
-    }, 800);
-    return () => window.clearInterval(id);
+      setScannerReady(!isDialogOpen() && !isKeeperField(el, scanRef.current));
+    };
+    const onFocusOut = () => {
+      window.requestAnimationFrame(() => {
+        if (isDialogOpen()) {
+          syncHint();
+          return;
+        }
+        const el = document.activeElement;
+        if (el === document.body || el === document.documentElement) {
+          scanRef.current?.focus();
+        }
+        syncHint();
+      });
+    };
+    document.addEventListener("focusin", syncHint);
+    document.addEventListener("focusout", onFocusOut);
+    scanRef.current?.focus();
+    syncHint();
+    return () => {
+      document.removeEventListener("focusin", syncHint);
+      document.removeEventListener("focusout", onFocusOut);
+    };
   }, []);
 
   const searchHits = useMemo(() => {
@@ -201,6 +271,12 @@ export function NewSale() {
         sale_date: saleDate,
         notes,
       });
+      if (userId) {
+        clearSaleDraft(userId);
+        setLastSaleId(userId, id);
+        setLastSaleIdState(id);
+      }
+      setRestoredDraft(false);
       push("Sale saved", "success");
       navigate(andPrint ? `/sales/${id}/print?autoprint=1` : `/sales/${id}`);
     } catch (err) {
@@ -217,11 +293,98 @@ export function NewSale() {
     setNotes("");
     setWalkInName("");
     setWalkInPhone("");
+    setCustomerId("");
+    setCashReceivedRaw("");
+    if (userId) clearSaleDraft(userId);
+    setRestoredDraft(false);
+  };
+
+  const currentDraft = (): SaleDraft => ({
+    docType,
+    customerId,
+    walkInName,
+    walkInPhone,
+    lines,
+    discountRaw,
+    paidRaw,
+    method,
+    saleDate,
+    notes,
+    cashReceivedRaw,
+  });
+
+  const applyDraft = (draft: SaleDraft) => {
+    setDocType(draft.docType);
+    setCustomerId(draft.customerId);
+    setWalkInName(draft.walkInName);
+    setWalkInPhone(draft.walkInPhone);
+    setLines(draft.lines);
+    setDiscountRaw(draft.discountRaw);
+    setPaidRaw(draft.paidRaw);
+    setMethod(draft.method);
+    if (draft.saleDate) setSaleDate(draft.saleDate);
+    setNotes(draft.notes);
+    setCashReceivedRaw(draft.cashReceivedRaw);
+  };
+
+  const parkCurrent = () => {
+    if (isDialogOpen() || busy) return;
+    if (lines.length === 0) {
+      push("Add at least one item before parking", "error");
+      return;
+    }
+    if (!userId) return;
+    const customerLabel = selectedCustomer?.name || walkInName.trim() || "Walk-in";
+    const result = parkBill(userId, {
+      customerLabel,
+      grandMinor: totals.grandTotal,
+      draft: currentDraft(),
+    });
+    setParked(listParkedBills(userId));
+    clearBill();
+    if (result.droppedOldest) push("Oldest parked bill was dropped (limit 10).", "error");
+    else push("Bill parked", "success");
+  };
+
+  const resumeParked = (row: ParkedBill) => {
+    if (lines.length > 0) {
+      setResumeTarget(row);
+      return;
+    }
+    const taken = takeParkedBill(userId, row.id);
+    if (!taken) return;
+    applyDraft(taken.draft);
+    setParked(listParkedBills(userId));
+    setRestoredDraft(true);
+  };
+
+  const reprintLast = () => {
+    if (isDialogOpen() || !lastSaleId) return;
+    navigate(`/sales/${lastSaleId}/print`);
   };
 
   const dirty =
     lines.length > 0 ||
     Boolean(discountRaw.trim() || paidRaw.trim() || notes.trim() || walkInName.trim() || walkInPhone.trim() || customerId);
+
+  useEffect(() => {
+    if (!userId || !draftReady) return;
+    saveSaleDraft(userId, currentDraft());
+  }, [
+    userId,
+    draftReady,
+    docType,
+    customerId,
+    walkInName,
+    walkInPhone,
+    lines,
+    discountRaw,
+    paidRaw,
+    method,
+    saleDate,
+    notes,
+    cashReceivedRaw,
+  ]);
 
   const requestClear = () => {
     if (dirty) setConfirmClear(true);
@@ -286,6 +449,19 @@ export function NewSale() {
       },
     },
     {
+      match: (e) => isAltLetter(e, "p"),
+      preventDefault: true,
+      run: () => {
+        if (isDialogOpen()) return;
+        parkCurrent();
+      },
+    },
+    {
+      match: (e) => isAltLetter(e, "r"),
+      preventDefault: true,
+      run: () => reprintLast(),
+    },
+    {
       match: (e) => isEscape(e) && !isDialogOpen(),
       run: () => {
         if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
@@ -314,24 +490,53 @@ export function NewSale() {
                 className={`rounded-md px-4 py-1.5 text-sm font-medium ${docType === "cash_memo" ? "bg-black text-white" : "text-gray-600"}`}
                 onClick={() => setDocType("cash_memo")}
               >
-                Cash memo
+                <Bi k="cashMemo" mutedClass={docType === "cash_memo" ? "text-gray-300" : "text-gray-500"} />
               </button>
               <button
                 type="button"
                 className={`rounded-md px-4 py-1.5 text-sm font-medium ${docType === "bill" ? "bg-black text-white" : "text-gray-600"}`}
                 onClick={() => setDocType("bill")}
               >
-                Bill
+                <Bi k="bill" mutedClass={docType === "bill" ? "text-gray-300" : "text-gray-500"} />
               </button>
             </div>
             <span className="text-xs text-slate-400">F4</span>
           </div>
         }
       />
-      <p className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700">
-        <span className="h-1.5 w-1.5 rounded-full bg-black" />
-        Scanner ready — gun will add items
-      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700">
+          <span className={`h-1.5 w-1.5 rounded-full ${scannerReady ? "bg-black" : "bg-slate-400"}`} />
+          {scannerReady ? <Bi k="scannerReady" /> : <Bi k="scannerPaused" />}
+        </p>
+        {restoredDraft ? (
+          <p className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700">
+            Restored unsaved bill
+          </p>
+        ) : null}
+        <button type="button" className="btn-ghost text-xs" disabled={!lastSaleId} onClick={reprintLast}>
+          Reprint last
+          <ShortcutHint keys="Alt+R" />
+        </button>
+      </div>
+      {parked.length > 0 ? (
+        <div className="rounded-lg border border-gray-200 bg-white p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Parked</p>
+          <ul className="mt-2 space-y-1">
+            {parked.map((row) => (
+              <li key={row.id} className="flex items-center justify-between gap-2 text-sm">
+                <span>
+                  {row.customerLabel} · {row.docType === "cash_memo" ? <Bi k="cashMemo" inline /> : <Bi k="bill" inline />} ·{" "}
+                  {formatMoney(BigInt(row.grandMinor), currency)} · {new Date(row.parkedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                </span>
+                <button type="button" className="btn-ghost text-xs" onClick={() => resumeParked(row)}>
+                  Resume
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {!profile?.business_name.trim() && (
         <WarningBanner>
@@ -538,28 +743,54 @@ export function NewSale() {
               <MoneyInput inputRef={paidRef} currency={currency} value={paidRaw} onChange={setPaidRaw} placeholder="Amount paid" />
             </div>
           )}
+          {method === "cash" && (
+            <div>
+              <label className="label">Cash received</label>
+              <MoneyInput currency={currency} value={cashReceivedRaw} onChange={setCashReceivedRaw} placeholder="Drawer" />
+              {cashDelta != null ? (
+                <p className={`mt-1 text-xs ${cashDelta < 0n ? "text-red-700" : "text-gray-700"}`}>
+                  {cashDelta < 0n ? (
+                    `Short ${formatMoney(-cashDelta, currency)}`
+                  ) : (
+                    <>
+                      <Bi k="change" inline /> {formatMoney(cashDelta, currency)}
+                    </>
+                  )}
+                </p>
+              ) : null}
+            </div>
+          )}
           <textarea className="input-field min-h-[64px]" placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
           <dl className="space-y-2 border-t border-gray-100 pt-3 text-sm">
-            <Row k="Subtotal" v={formatMoney(totals.subtotal, currency)} />
-            <Row k="Discount" v={formatMoney(discount, currency)} />
-            <Row k="Tax" v={formatMoney(totals.taxTotal, currency)} />
-            <Row k="Grand" v={formatMoney(totals.grandTotal, currency)} strong />
-            <Row k="Due" v={formatMoney(due < 0n ? 0n : due, currency)} />
+            <Row k={<Bi k="subtotal" />} v={formatMoney(totals.subtotal, currency)} />
+            <Row k={<Bi k="discount" />} v={formatMoney(discount, currency)} />
+            <Row k={<Bi k="tax" />} v={formatMoney(totals.taxTotal, currency)} />
+            {totals.roundOff !== 0n ? <Row k={<Bi k="roundOff" />} v={formatMoney(totals.roundOff, currency)} /> : null}
+            <Row k={<Bi k="grandTotal" />} v={formatMoney(totals.grandTotal, currency)} strong />
+            <Row k={<Bi k="paid" />} v={formatMoney(paidNow, currency)} />
+            <Row k={<Bi k="due" />} v={formatMoney(due < 0n ? 0n : due, currency)} />
+            {cashDelta != null && cashDelta >= 0n ? (
+              <Row k={<Bi k="change" />} v={formatMoney(cashDelta, currency)} />
+            ) : null}
           </dl>
           {stockBlockers.length > 0 && (
             <p className="text-xs text-red-700">Save is blocked until quantities fit on-hand stock.</p>
           )}
           <div className="flex flex-col gap-2">
             <button type="button" className="btn-primary" disabled={busy} onClick={() => save(false)}>
-              Save
+              <Bi k="save" />
               <ShortcutHint keys="F8" />
             </button>
             <button type="button" className="btn-secondary" disabled={busy} onClick={() => save(true)}>
-              Save and print
+              <Bi k="saveAndPrint" />
               <ShortcutHint keys="F9" />
             </button>
+            <button type="button" className="btn-secondary" disabled={busy} onClick={parkCurrent}>
+              <Bi k="park" />
+              <ShortcutHint keys="Alt+P" />
+            </button>
             <button type="button" className="btn-ghost" onClick={requestClear}>
-              Clear
+              <Bi k="clear" />
               <ShortcutHint keys="F10" />
             </button>
           </div>
@@ -574,11 +805,28 @@ export function NewSale() {
         onConfirm={clearBill}
         onClose={() => setConfirmClear(false)}
       />
+      <ConfirmDialog
+        open={Boolean(resumeTarget)}
+        title="Replace this bill?"
+        message="The counter already has lines. Resume will replace them with the parked bill."
+        confirmLabel="Resume"
+        danger
+        onConfirm={() => {
+          if (!resumeTarget) return;
+          const taken = takeParkedBill(userId, resumeTarget.id);
+          if (taken) {
+            applyDraft(taken.draft);
+            setParked(listParkedBills(userId));
+            setRestoredDraft(true);
+          }
+        }}
+        onClose={() => setResumeTarget(null)}
+      />
     </div>
   );
 }
 
-function Row({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
+function Row({ k, v, strong }: { k: ReactNode; v: string; strong?: boolean }) {
   return (
     <div className="flex justify-between">
       <dt className="text-slate-500">{k}</dt>

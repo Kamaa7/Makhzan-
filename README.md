@@ -8,6 +8,13 @@ It is software for **one store on one computer**. You add your own products, tak
 
 `React` · `Vite` · `TypeScript` · `Tailwind` · `sql.js` · local SQLite in the browser
 
+## Phase 3
+
+- **Customer statement** — a customer's bills and payments, balance matching outstanding, **New bill** opens New Sale with that customer as a Bill (`/sale?customer=`). Walk-in sales stay off the list.
+- **SKU labels** — **Print label** on Products draws a small CODE128 sticker of the SKU (same string the gun already scans). Blank SKU disables the button.
+- **Day-close card** on Home — collected today by method from `sale_payments` (header amount counted once if there are no payment rows), plus still due on today's documents. **Mark day reviewed** is a local reminder; it does not lock the till.
+- **عربي** — optional Arabic beside English for this login (`localStorage`). Off by default.
+
 ## How a scan becomes a line
 
 ```mermaid
@@ -46,7 +53,9 @@ flowchart TB
 | `/sales/:id` | Sale detail — remaining payment, PDF |
 | `/sales/:id/print` | Printable receipt |
 | `/products` | Products & stock |
+| `/products/:id/label` | SKU barcode label (CODE128) |
 | `/customers` | Walk-in and credit buyers on this computer |
+| `/customers/:id` | Customer statement — bills, payments, balance |
 | `/store` | Shop name, currency, download/import `makhzan.db` |
 
 <details>
@@ -90,10 +99,11 @@ Totals on the New Sale screen use the same helpers as the save path (`computeSal
 - **Subtotal** — qty × unit price per line, integer minor units
 - **Discount** — cannot exceed subtotal
 - **Tax** — line tax is taken, then scaled by `(subtotal − discount) / subtotal` (proportional after discount)
-- **Grand total** — subtotal − discount + tax
+- **Grand total** — subtotal − discount + tax, then rounded to the nearest whole major unit (same `computeSaleTotals` as save)
+- **Round off** — stored on the sale (`round_off`); omitted on print when zero
 - **Due** — grand total − amount paid (bills)
 
-There is no parked bill, no sale-return document, and no thermal-printer driver. Print is the browser print page plus a PDF download (`src/lib/pdf.ts`).
+Parked bills (`Alt+P`) sit in this browser per account and are not sales — stock does not move until Save. Print is A4 or an 80mm receipt (`?format=80`), plus PDF download.
 
 </details>
 
@@ -151,6 +161,8 @@ From `src/lib/shortcuts.ts` (F1 opens this same list in the app). Digits and Ent
 | Ctrl+Enter | New Sale — save |
 | F9 | New Sale — save and print |
 | F10 | New Sale — clear the bill |
+| Alt+P | New Sale — park this bill |
+| Alt+R | Reprint last memo (Home and New Sale) |
 | Esc | Close a dialog, or return to the scanner |
 | F3 | Sales Register / Products / Customers — focus search |
 | Alt+E | Sales Register — export CSV |
@@ -174,7 +186,7 @@ SQLite tables in `src/db/schema.sql`, loaded by sql.js WASM (`src/db/engine.ts`)
 
 The session token is also in `localStorage` under `makhzan.session`. Rows are scoped by `user_id`. Clearing site data wipes the shop. Two browsers do not share a ledger.
 
-**This build does not** sync to another PC, talk to a server, or park an unfinished bill.
+**This build does not** sync to another PC or talk to a server. Parked bills stay in this browser for that login.
 
 </details>
 

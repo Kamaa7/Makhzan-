@@ -14,19 +14,22 @@ import {
 import { useState, type ComponentType, type SVGProps } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useLanguage } from "../context/LanguageContext";
 import { useShortcuts } from "../hooks/useShortcuts";
+import type { ArKey } from "../lib/i18n";
 import { isAltDigit, isFKey } from "../lib/shortcuts";
+import { Bi } from "./Bi";
 import { ShortcutHint, ShortcutsDialog } from "./ShortcutsDialog";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
 
-const storeLinks: { to: string; label: string; icon: Icon; end?: boolean }[] = [
-  { to: "/", label: "Home", icon: HomeIcon, end: true },
-  { to: "/sale", label: "New Sale", icon: ShoppingBagIcon },
-  { to: "/sales", label: "Sales Register", icon: ClipboardDocumentListIcon },
-  { to: "/products", label: "Products & Stock", icon: CubeIcon },
-  { to: "/customers", label: "Customers", icon: UsersIcon },
-  { to: "/store", label: "Store Profile", icon: BuildingStorefrontIcon },
+const storeLinks: { to: string; k: ArKey; icon: Icon; end?: boolean }[] = [
+  { to: "/", k: "home", icon: HomeIcon, end: true },
+  { to: "/sale", k: "newSale", icon: ShoppingBagIcon },
+  { to: "/sales", k: "salesRegister", icon: ClipboardDocumentListIcon },
+  { to: "/products", k: "productsStock", icon: CubeIcon },
+  { to: "/customers", k: "customers", icon: UsersIcon },
+  { to: "/store", k: "storeProfile", icon: BuildingStorefrontIcon },
 ];
 
 function pageTitle(pathname: string): string {
@@ -35,13 +38,14 @@ function pageTitle(pathname: string): string {
   if (pathname.match(/^\/sales\/[^/]+/)) return "Sale";
   if (pathname.startsWith("/sales")) return "Sales Register";
   if (pathname.startsWith("/products")) return "Products & Stock";
+  if (pathname.match(/^\/customers\/[^/]+/)) return "Statement";
   if (pathname.startsWith("/customers")) return "Customers";
   if (pathname.startsWith("/store")) return "Store Profile";
   return "Makhzan";
 }
 
 function navClass(active: boolean) {
-  return `flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium ${
+  return `flex items-start gap-2.5 rounded-md px-3 py-2 text-sm font-medium ${
     active ? "bg-black text-white" : "text-black hover:bg-gray-100"
   }`;
 }
@@ -65,8 +69,8 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
           >
             {({ isActive }) => (
               <>
-                <link.icon className={`h-5 w-5 ${isActive ? "text-white" : "text-black"}`} />
-                {link.label}
+                <link.icon className={`mt-0.5 h-5 w-5 shrink-0 ${isActive ? "text-white" : "text-black"}`} />
+                <Bi k={link.k} mutedClass={isActive ? "text-gray-300" : "text-gray-500"} />
               </>
             )}
           </NavLink>
@@ -76,8 +80,8 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         <NavLink to="/store" onClick={onNavigate} className={({ isActive }) => navClass(isActive)}>
           {({ isActive }) => (
             <>
-              <Cog6ToothIcon className={`h-5 w-5 ${isActive ? "text-white" : "text-black"}`} />
-              Settings
+              <Cog6ToothIcon className={`mt-0.5 h-5 w-5 shrink-0 ${isActive ? "text-white" : "text-black"}`} />
+              <Bi k="settings" mutedClass={isActive ? "text-gray-300" : "text-gray-500"} />
             </>
           )}
         </NavLink>
@@ -90,6 +94,7 @@ const ALT_ROUTES = ["/", "/sale", "/sales", "/products", "/customers", "/store"]
 
 export function Layout() {
   const { user, signOut } = useAuth();
+  const { arabic, toggleArabic } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -153,10 +158,19 @@ export function Layout() {
               Shortcuts
               <ShortcutHint keys="F1" />
             </button>
+            <button
+              type="button"
+              className={`rounded-md px-2.5 py-1 text-sm font-medium ${arabic ? "bg-black text-white" : "text-gray-700 hover:bg-gray-100"}`}
+              aria-pressed={arabic}
+              title="Arabic beside English"
+              onClick={toggleArabic}
+            >
+              عربي
+            </button>
             <p className="hidden truncate text-sm text-slate-500 sm:block">{user?.email}</p>
-            <button type="button" className="btn-outline text-sm" onClick={leave}>
-              <ArrowRightOnRectangleIcon className="h-4 w-4" />
-              Sign out
+            <button type="button" className="btn-outline items-start text-sm" onClick={leave}>
+              <ArrowRightOnRectangleIcon className="mt-0.5 h-4 w-4 shrink-0" />
+              <Bi k="signOut" />
             </button>
           </div>
         </header>

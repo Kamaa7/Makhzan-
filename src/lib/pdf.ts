@@ -5,10 +5,26 @@ import { formatDate, formatQty } from "./format";
 import { asPaise, formatMoney } from "./money";
 import type { Sale, SaleItem, StoreProfile } from "./types";
 
-function memoTitle(sale: Sale, profile: StoreProfile): string {
+export function memoTitle(sale: Sale, profile: StoreProfile): string {
   if (sale.doc_type === "cash_memo") return "CASH MEMO";
   if (profile.gstin.trim() && asPaise(sale.tax_total) > 0n) return "TAX INVOICE";
   return "BILL";
+}
+
+function totalsRows(sale: Sale, currency: string): [string, string][] {
+  const rows: [string, string][] = [
+    ["Subtotal", formatMoney(asPaise(sale.subtotal), currency)],
+    ["Discount", formatMoney(asPaise(sale.discount), currency)],
+    ["Tax", formatMoney(asPaise(sale.tax_total), currency)],
+  ];
+  const roundOff = asPaise(sale.round_off);
+  if (roundOff !== 0n) rows.push(["Round off", formatMoney(roundOff, currency)]);
+  rows.push(
+    ["Grand total", formatMoney(asPaise(sale.grand_total), currency)],
+    ["Paid", formatMoney(asPaise(sale.amount_paid), currency)],
+    ["Due", formatMoney(asPaise(sale.grand_total) - asPaise(sale.amount_paid), currency)],
+  );
+  return rows;
 }
 
 export function buildSalePdf(sale: Sale, items: SaleItem[], profile: StoreProfile): jsPDF {
@@ -96,14 +112,7 @@ export function buildSalePdf(sale: Sale, items: SaleItem[], profile: StoreProfil
 
   y = ((doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable?.finalY ?? y) + 8;
 
-  const rows: [string, string][] = [
-    ["Subtotal", formatMoney(asPaise(sale.subtotal), currency)],
-    ["Discount", formatMoney(asPaise(sale.discount), currency)],
-    ["Tax", formatMoney(asPaise(sale.tax_total), currency)],
-    ["Grand total", formatMoney(asPaise(sale.grand_total), currency)],
-    ["Paid", formatMoney(asPaise(sale.amount_paid), currency)],
-    ["Due", formatMoney(asPaise(sale.grand_total) - asPaise(sale.amount_paid), currency)],
-  ];
+  const rows = totalsRows(sale, currency);
 
   autoTable(doc, {
     startY: y,
@@ -152,4 +161,71 @@ export function buildSalePdf(sale: Sale, items: SaleItem[], profile: StoreProfil
 
 export function downloadSalePdf(sale: Sale, items: SaleItem[], profile: StoreProfile): void {
   buildSalePdf(sale, items, profile).save(`${sale.doc_number}.pdf`);
+}
+
+export function buildReceiptPdf(sale: Sale, items: SaleItem[], profile: StoreProfile): jsPDF {
+  const currency = profile.currency || "INR";
+  const height = Math.max(140, 70 + items.length * 8);
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: [80, height] });
+  const width = 80;
+  let y = 8;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text(profile.business_name || "Store", width / 2, y, { align: "center" });
+  y += 5;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  if (profile.gstin.trim()) {
+    doc.text(`GSTIN: ${profile.gstin}`, width / 2, y, { align: "center" });
+    y += 4;
+  }
+  doc.setFont("helvetica", "bold");
+  doc.text(memoTitle(sale, profile), width / 2, y, { align: "center" });
+  y += 5;
+  doc.setFont("helvetica", "normal");
+  doc.text(sale.doc_number, width / 2, y, { align: "center" });
+  y += 4;
+  doc.text(formatDate(sale.sale_date), width / 2, y, { align: "center" });
+  y += 4;
+  if (sale.customer_name.trim()) {
+    doc.text(sale.customer_name, width / 2, y, { align: "center" });
+    y += 4;
+  }
+  doc.setDrawColor(0);
+  doc.line(4, y, width - 4, y);
+  y += 5;
+
+  doc.setFontSize(8);
+  for (const item of items) {
+    const name = doc.splitTextToSize(item.description, 48);
+    doc.text(name, 4, y);
+    doc.text(formatQty(Number(item.qty)), 52, y, { align: "right" });
+    doc.text(formatMoney(asPaise(item.line_amount), currency), width - 4, y, { align: "right" });
+    y += Math.max(4, name.length * 3.5);
+  }
+
+  y += 2;
+  doc.line(4, y, width - 4, y);
+  y += 5;
+  for (const [label, value] of totalsRows(sale, currency)) {
+    doc.text(label, 4, y);
+    doc.text(value, width - 4, y, { align: "right" });
+    y += 4;
+  }
+
+  y += 2;
+  const words = doc.splitTextToSize(amountInWords(asPaise(sale.grand_total), currency), width - 8);
+  doc.text(words, 4, y);
+  y += words.length * 3.5 + 3;
+  if (profile.memo_footer.trim()) {
+    const footer = doc.splitTextToSize(profile.memo_footer, width - 8);
+    doc.setFont("helvetica", "italic");
+    doc.text(footer, 4, y);
+  }
+  return doc;
+}
+
+export function downloadReceiptPdf(sale: Sale, items: SaleItem[], profile: StoreProfile): void {
+  buildReceiptPdf(sale, items, profile).save(`${sale.doc_number}-receipt.pdf`);
 }

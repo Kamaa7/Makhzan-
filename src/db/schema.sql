@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS sales (
   subtotal INTEGER NOT NULL DEFAULT 0 CHECK (subtotal >= 0),
   discount INTEGER NOT NULL DEFAULT 0 CHECK (discount >= 0),
   tax_total INTEGER NOT NULL DEFAULT 0 CHECK (tax_total >= 0),
+  round_off INTEGER NOT NULL DEFAULT 0,
   grand_total INTEGER NOT NULL DEFAULT 0 CHECK (grand_total >= 0),
   amount_paid INTEGER NOT NULL DEFAULT 0 CHECK (amount_paid >= 0),
   payment_method TEXT NOT NULL DEFAULT 'cash'

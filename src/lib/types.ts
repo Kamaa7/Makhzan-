@@ -65,6 +65,7 @@ export type Sale = {
   subtotal: number;
   discount: number;
   tax_total: number;
+  round_off: number;
   grand_total: number;
   amount_paid: number;
   payment_method: PaymentMethod;

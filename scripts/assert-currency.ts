@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { amountInWords } from "../src/lib/amountInWords";
-import { formatMoney, getCurrency, parseMajorInput } from "../src/lib/money";
+import { computeSaleTotals, formatMoney, getCurrency, parseMajorInput, roundOffStep, roundToNearestStep } from "../src/lib/money";
 
 assert.equal(getCurrency("INR").decimals, 2);
 assert.equal(getCurrency("AED").decimals, 2);
@@ -31,6 +31,21 @@ assert.equal(
 
 const unknown = formatMoney(1050n, "XXX");
 assert.match(unknown, /10\.50/);
+
+assert.equal(roundOffStep("INR"), 100n);
+assert.equal(roundOffStep("KWD"), 1000n);
+assert.equal(roundToNearestStep(1050n, 100n), 1100n);
+assert.equal(roundToNearestStep(1250n, 1000n), 1000n);
+
+const inrRound = computeSaleTotals([{ qty: 1, unitPrice: 1050n, taxRate: 0 }], 0n, "INR");
+assert.equal(inrRound.exactTotal, 1050n);
+assert.equal(inrRound.grandTotal, 1100n);
+assert.equal(inrRound.roundOff, 50n);
+
+const kwdRound = computeSaleTotals([{ qty: 1, unitPrice: 1250n, taxRate: 0 }], 0n, "KWD");
+assert.equal(kwdRound.exactTotal, 1250n);
+assert.equal(kwdRound.grandTotal, 1000n);
+assert.equal(kwdRound.roundOff, -250n);
 
 console.log("currency asserts ok");
 console.log("  INR 105000 minor ->", inr, "|", amountInWords(105000n, "INR"));

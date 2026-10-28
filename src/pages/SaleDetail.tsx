@@ -130,9 +130,12 @@ export function SaleDetail() {
             <button type="button" className="btn-secondary" onClick={() => downloadSalePdf(sale, items, profile)}>
               Download PDF
             </button>
-            <Link className="btn-primary" to={`/sales/${sale.id}/print`}>
-              Print
+            <Link className="btn-secondary" to={`/sales/${sale.id}/print`}>
+              A4
               <ShortcutHint keys="Ctrl+P" />
+            </Link>
+            <Link className="btn-primary" to={`/sales/${sale.id}/print?format=80`}>
+              Receipt
             </Link>
           </>
         }
@@ -150,6 +153,9 @@ export function SaleDetail() {
           <Row k="Subtotal" v={formatMoney(asPaise(sale.subtotal), currency)} />
           <Row k="Discount" v={formatMoney(asPaise(sale.discount), currency)} />
           <Row k="Tax" v={formatMoney(asPaise(sale.tax_total), currency)} />
+          {asPaise(sale.round_off) !== 0n ? (
+            <Row k="Round off" v={formatMoney(asPaise(sale.round_off), currency)} />
+          ) : null}
           <Row k="Grand total" v={formatMoney(asPaise(sale.grand_total), currency)} />
           <Row k="Paid" v={formatMoney(asPaise(sale.amount_paid), currency)} />
           <Row k="Due" v={formatMoney(due, currency)} />

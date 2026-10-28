@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Bi } from "../components/Bi";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { EmptyState } from "../components/EmptyState";
 import { Modal } from "../components/Modal";
@@ -29,6 +30,7 @@ type Filter = "active" | "low" | "inactive" | "all";
 export function Products() {
   const { profile } = useAuth();
   const { push } = useToast();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const currency = profile?.currency || "INR";
   const [products, setProducts] = useState<Product[]>([]);
@@ -215,6 +217,18 @@ export function Products() {
                     <button type="button" className="btn-ghost text-xs" onClick={() => setStockFor(p)}>
                       Stock
                     </button>
+                    {p.sku.trim() ? (
+                      <button type="button" className="btn-ghost text-xs" onClick={() => navigate(`/products/${p.id}/label`)}>
+                        <Bi k="printLabel" />
+                      </button>
+                    ) : (
+                      <span className="inline-flex flex-col items-end">
+                        <button type="button" className="btn-ghost text-xs" disabled aria-label="Print label — a SKU is required">
+                          <Bi k="printLabel" />
+                        </button>
+                        <span className="px-2 text-[10px] text-slate-500">A SKU is required</span>
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -5,6 +5,7 @@ import { App } from "./App";
 import { BootScreen } from "./components/BootScreen";
 import { AuthProvider } from "./context/AuthContext";
 import { DbProvider } from "./context/DbContext";
+import { LanguageProvider } from "./context/LanguageContext";
 import { ToastProvider } from "./context/ToastContext";
 import "./index.css";
 
@@ -36,9 +37,11 @@ createRoot(root).render(
       <DbProvider>
         <BrowserRouter>
           <AuthProvider>
-            <ToastProvider>
-              <App />
-            </ToastProvider>
+            <LanguageProvider>
+              <ToastProvider>
+                <App />
+              </ToastProvider>
+            </LanguageProvider>
           </AuthProvider>
         </BrowserRouter>
       </DbProvider>

@@ -1,7 +1,7 @@
 import { asPaise, computeSaleTotals } from "../lib/money";
 import type { DocType, PaymentMethod } from "../lib/types";
 import { requireUserId } from "./auth";
-import { getDb, newId, nowIso, oneRow, persistDb, runSql } from "./engine";
+import { getDb, newId, nowIso, oneRow, persistDb, refreshAutoBackup, runSql } from "./engine";
 import { mapProduct } from "./mappers";
 
 const METHODS = new Set(["cash", "upi", "card", "bank", "cheque", "other"]);
@@ -83,9 +83,12 @@ export async function createSale(input: {
     }
   }
 
+  const profileRow = oneRow("SELECT currency FROM store_profiles WHERE user_id = ?", [uid]);
+  const currency = String(profileRow?.currency ?? "INR");
   const totals = computeSaleTotals(
     prepared.map((i) => ({ qty: i.qty, unitPrice: asPaise(i.unit_price), taxRate: i.tax_rate })),
     asPaise(input.discount),
+    currency,
   );
   if (asPaise(input.discount) > totals.subtotal) throw new Error("Discount cannot exceed subtotal");
 
@@ -122,8 +125,8 @@ export async function createSale(input: {
       `INSERT INTO sales (
         id, user_id, doc_type, doc_number, sale_date, customer_id,
         customer_name, customer_phone, customer_email, customer_address, customer_gstin,
-        subtotal, discount, tax_total, grand_total, amount_paid, payment_method, status, notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        subtotal, discount, tax_total, round_off, grand_total, amount_paid, payment_method, status, notes, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         saleId,
         uid,
@@ -139,6 +142,7 @@ export async function createSale(input: {
         Number(totals.subtotal),
         Number(asPaise(input.discount)),
         Number(totals.taxTotal),
+        Number(totals.roundOff),
         Number(totals.grandTotal),
         Number(paid),
         input.payment_method,
@@ -205,6 +209,7 @@ export async function createSale(input: {
     throw err;
   }
   await persistDb();
+  await refreshAutoBackup();
   return saleId;
 }
 
@@ -238,6 +243,7 @@ export async function recordSalePayment(input: {
     [newPaid, status, input.method, stamp, input.sale_id, uid],
   );
   await persistDb();
+  await refreshAutoBackup();
   return id;
 }
 
@@ -275,5 +281,6 @@ export async function adjustStock(input: {
     [id, uid, input.product_id, change, next, input.reason, input.note ?? "", stamp],
   );
   await persistDb();
+  await refreshAutoBackup();
   return id;
 }

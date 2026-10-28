@@ -71,8 +71,14 @@ export const SHORTCUT_SECTIONS: { title: string; rows: { keys: string; action: s
       { keys: "Ctrl+Enter", action: "Save" },
       { keys: "F9", action: "Save and print" },
       { keys: "F10", action: "Clear the bill" },
+      { keys: "Alt+P", action: "Park this bill" },
+      { keys: "Alt+R", action: "Reprint last memo" },
       { keys: "Esc", action: "Close a dialog, or return to the scanner" },
     ],
+  },
+  {
+    title: "Home",
+    rows: [{ keys: "Alt+R", action: "Reprint last memo" }],
   },
   {
     title: "Sales Register",

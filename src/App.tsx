@@ -3,9 +3,11 @@ import { BootScreen } from "./components/BootScreen";
 import { Layout } from "./components/Layout";
 import { useAuth } from "./context/AuthContext";
 import { useDb } from "./context/DbContext";
+import { CustomerStatement } from "./pages/CustomerStatement";
 import { Customers } from "./pages/Customers";
 import { Home } from "./pages/Home";
 import { NewSale } from "./pages/NewSale";
+import { ProductLabel } from "./pages/ProductLabel";
 import { Products } from "./pages/Products";
 import { SaleDetail } from "./pages/SaleDetail";
 import { SalePrint } from "./pages/SalePrint";
@@ -37,9 +39,11 @@ export function App() {
           <Route path="/sales/:id" element={<SaleDetail />} />
           <Route path="/products" element={<Products />} />
           <Route path="/customers" element={<Customers />} />
+          <Route path="/customers/:id" element={<CustomerStatement />} />
           <Route path="/store" element={<StoreProfilePage />} />
         </Route>
         <Route path="/sales/:id/print" element={<SalePrint />} />
+        <Route path="/products/:id/label" element={<ProductLabel />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

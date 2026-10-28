@@ -170,7 +170,7 @@ export function StoreProfilePage() {
       <ConfirmDialog
         open={Boolean(importFile)}
         title="Import database"
-        message="Import replaces all data in this browser. Continue?"
+        message="This replaces the shop on this computer."
         confirmLabel="Import"
         danger
         onClose={() => setImportFile(null)}

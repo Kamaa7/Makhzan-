@@ -1,4 +1,16 @@
-import type { Customer, DocType, Product, Sale, SaleItem, SalePayment, SaleStatus, StockMovement, StoreProfile } from "../lib/types";
+import { isoToLocalDate } from "../lib/format";
+import type {
+  Customer,
+  DocType,
+  PaymentMethod,
+  Product,
+  Sale,
+  SaleItem,
+  SalePayment,
+  SaleStatus,
+  StockMovement,
+  StoreProfile,
+} from "../lib/types";
 import { requireUserId } from "./auth";
 import { allRows, newId, nowIso, oneRow, persistDb, runSql } from "./engine";
 import { mapCustomer, mapMovement, mapPayment, mapProduct, mapProfile, mapSale, mapSaleItem } from "./mappers";
@@ -314,6 +326,58 @@ export function listSalePayments(saleId: string): SalePayment[] {
     "SELECT * FROM sale_payments WHERE sale_id = ? AND user_id = ? ORDER BY created_at",
     [saleId, uid],
   ).map(mapPayment);
+}
+
+const PAYMENT_METHOD_VALUES: PaymentMethod[] = ["cash", "upi", "card", "bank", "cheque", "other"];
+
+function emptyByMethod(): Record<PaymentMethod, number> {
+  return { cash: 0, upi: 0, card: 0, bank: 0, cheque: 0, other: 0 };
+}
+
+function asMethod(value: unknown): PaymentMethod {
+  const method = String(value) as PaymentMethod;
+  return PAYMENT_METHOD_VALUES.includes(method) ? method : "other";
+}
+
+export type CustomerPaymentRow = SalePayment & { doc_number: string };
+
+export function listCustomerPayments(customerId: string): CustomerPaymentRow[] {
+  const uid = requireUserId();
+  return allRows(
+    `SELECT p.id, p.sale_id, p.amount, p.method, p.note, p.created_at, s.doc_number
+     FROM sale_payments p
+     INNER JOIN sales s ON s.id = p.sale_id AND s.user_id = p.user_id
+     WHERE s.user_id = ? AND s.customer_id = ?
+     ORDER BY p.created_at DESC`,
+    [uid, customerId],
+  ).map((r) => ({ ...mapPayment(r), doc_number: String(r.doc_number ?? "") }));
+}
+
+/** Collected today from sale_payments (shop-local date). Header amount_paid is counted once if that sale has no payment rows. */
+export function getDayCloseStats(today: string): {
+  byMethod: Record<PaymentMethod, number>;
+  stillDue: number;
+} {
+  const uid = requireUserId();
+  const byMethod = emptyByMethod();
+  const payments = allRows("SELECT sale_id, amount, method, created_at FROM sale_payments WHERE user_id = ?", [uid]);
+  const salesWithPayments = new Set<string>();
+  for (const r of payments) {
+    salesWithPayments.add(String(r.sale_id));
+    if (isoToLocalDate(String(r.created_at)) !== today) continue;
+    byMethod[asMethod(r.method)] += Number(r.amount);
+  }
+  const todaySales = allRows(
+    "SELECT id, grand_total, amount_paid, payment_method FROM sales WHERE user_id = ? AND sale_date = ?",
+    [uid, today],
+  );
+  for (const s of todaySales) {
+    const paid = Number(s.amount_paid);
+    if (paid <= 0 || salesWithPayments.has(String(s.id))) continue;
+    byMethod[asMethod(s.payment_method)] += paid;
+  }
+  const stillDue = todaySales.reduce((sum, r) => sum + (Number(r.grand_total) - Number(r.amount_paid)), 0);
+  return { byMethod, stillDue };
 }
 
 export function getHomeStats(today: string): {
