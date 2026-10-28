@@ -22,6 +22,13 @@ export function BootScreen({
             <p className="font-medium">{message}</p>
             <p className="mt-1">{error}</p>
           </ErrorBanner>
+          <button
+            type="button"
+            className="btn-primary mt-4 w-full py-3"
+            onClick={() => window.location.reload()}
+          >
+            Reload
+          </button>
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useAuth } from "./AuthContext";
 import { readArabicOn, writeArabicOn } from "../lib/i18n";
+import { useAuth } from "./AuthContext";
 
 type LanguageContextValue = {
   arabic: boolean;

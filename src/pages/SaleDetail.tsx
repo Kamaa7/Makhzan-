@@ -111,8 +111,10 @@ export function SaleDetail() {
       setAmount("");
       setNote("");
       await load();
+      return true;
     } catch (err) {
       push(err instanceof Error ? err.message : "Payment failed", "error");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -225,8 +227,8 @@ export function SaleDetail() {
           <form
             className="space-y-3"
             onSubmit={async (e) => {
-              await recordPayment(e);
-              setPayOpen(false);
+              const ok = await recordPayment(e);
+              if (ok) setPayOpen(false);
             }}
           >
             <MoneyInput inputRef={amountRef} currency={currency} value={amount} onChange={setAmount} placeholder="Amount" />

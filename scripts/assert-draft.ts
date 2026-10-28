@@ -55,4 +55,10 @@ assert.ok(saleDraftIsMeaningful(roundTrip));
 assert.equal(parseSaleDraft("{}"), null);
 assert.equal(parseSaleDraft('{"docType":"cash_memo","method":"cash","lines":[]}'), null);
 
+const messy = parseSaleDraft(
+  '{"docType":"cash_memo","method":"cash","discountRaw":"","paidRaw":"","saleDate":"","notes":"","walkInName":"","walkInPhone":"","customerId":"","cashReceivedRaw":"","lines":[{"key":"x","qty":1,"unitPrice":"12.34","taxRate":0}]}',
+);
+assert.ok(messy);
+assert.equal(messy.lines[0].unitPrice, 0n);
+
 console.log("draft asserts ok");

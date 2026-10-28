@@ -68,6 +68,7 @@ export function NewSale() {
   const [parked, setParked] = useState<ParkedBill[]>([]);
   const [resumeTarget, setResumeTarget] = useState<ParkedBill | null>(null);
   const [lastSaleId, setLastSaleIdState] = useState<string | null>(null);
+  const skipDraftSave = useRef(true);
 
   useEffect(() => {
     try {
@@ -80,9 +81,10 @@ export function NewSale() {
 
   useEffect(() => {
     if (!userId) {
-      setDraftReady(true);
+      setDraftReady(false);
       return;
     }
+    skipDraftSave.current = true;
     const draft = loadSaleDraft(userId);
     if (draft) {
       setDocType(draft.docType);
@@ -171,7 +173,7 @@ export function NewSale() {
     });
   };
 
-  useBarcodeScanner(onScan, true);
+  useBarcodeScanner(onScan, scannerReady);
 
   useEffect(() => {
     const syncHint = () => {
@@ -369,6 +371,10 @@ export function NewSale() {
 
   useEffect(() => {
     if (!userId || !draftReady) return;
+    if (skipDraftSave.current) {
+      skipDraftSave.current = false;
+      return;
+    }
     saveSaleDraft(userId, currentDraft());
   }, [
     userId,
@@ -527,7 +533,7 @@ export function NewSale() {
               <li key={row.id} className="flex items-center justify-between gap-2 text-sm">
                 <span>
                   {row.customerLabel} · {row.docType === "cash_memo" ? <Bi k="cashMemo" inline /> : <Bi k="bill" inline />} ·{" "}
-                  {formatMoney(BigInt(row.grandMinor), currency)} · {new Date(row.parkedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                  {formatMoney(parkedGrand(row.grandMinor), currency)} · {new Date(row.parkedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
                 </span>
                 <button type="button" className="btn-ghost text-xs" onClick={() => resumeParked(row)}>
                   Resume
@@ -824,6 +830,14 @@ export function NewSale() {
       />
     </div>
   );
+}
+
+function parkedGrand(raw: string): bigint {
+  try {
+    return BigInt(raw || "0");
+  } catch {
+    return 0n;
+  }
 }
 
 function Row({ k, v, strong }: { k: ReactNode; v: string; strong?: boolean }) {

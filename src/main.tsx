@@ -20,6 +20,14 @@ class BootErrorBoundary extends Component<{ children: ReactNode }, { error: Erro
     console.error(error, info.componentStack);
   }
 
+  componentDidMount() {
+    if (import.meta.hot) {
+      import.meta.hot.on("vite:afterUpdate", () => {
+        this.setState({ error: null });
+      });
+    }
+  }
+
   render() {
     if (this.state.error) {
       return <BootScreen message="Makhzan failed to start." error={this.state.error.message} />;

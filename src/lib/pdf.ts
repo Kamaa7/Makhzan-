@@ -5,9 +5,13 @@ import { formatDate, formatQty } from "./format";
 import { asPaise, formatMoney } from "./money";
 import type { Sale, SaleItem, StoreProfile } from "./types";
 
+function text(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
 export function memoTitle(sale: Sale, profile: StoreProfile): string {
   if (sale.doc_type === "cash_memo") return "CASH MEMO";
-  if (profile.gstin.trim() && asPaise(sale.tax_total) > 0n) return "TAX INVOICE";
+  if (text(profile.gstin) && asPaise(sale.tax_total) > 0n) return "TAX INVOICE";
   return "BILL";
 }
 
@@ -35,7 +39,7 @@ export function buildSalePdf(sale: Sale, items: SaleItem[], profile: StoreProfil
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
-  doc.text(profile.business_name || "Store", 14, y);
+  doc.text(text(profile.business_name) || "Store", 14, y);
   doc.setFontSize(12);
   doc.text(memoTitle(sale, profile), pageWidth - 14, y, { align: "right" });
   y += 6;
@@ -50,7 +54,7 @@ export function buildSalePdf(sale: Sale, items: SaleItem[], profile: StoreProfil
     doc.text(lines, 14, y);
     y += lines.length * 4 + 2;
   }
-  if (profile.gstin.trim()) {
+  if (text(profile.gstin)) {
     doc.setFont("helvetica", "bold");
     doc.text(`GSTIN: ${profile.gstin}`, 14, y);
     doc.setFont("helvetica", "normal");
@@ -134,13 +138,13 @@ export function buildSalePdf(sale: Sale, items: SaleItem[], profile: StoreProfil
   doc.text(wordLines, 14, y);
   y += wordLines.length * 4 + 6;
 
-  if (sale.notes.trim()) {
+  if (text(sale.notes)) {
     const noteLines = doc.splitTextToSize(`Notes: ${sale.notes}`, pageWidth - 28);
     doc.text(noteLines, 14, y);
     y += noteLines.length * 4 + 6;
   }
 
-  if (profile.memo_footer.trim()) {
+  if (text(profile.memo_footer)) {
     const footerLines = doc.splitTextToSize(profile.memo_footer, pageWidth - 28);
     doc.setFont("helvetica", "italic");
     doc.text(footerLines, 14, y);
@@ -172,11 +176,11 @@ export function buildReceiptPdf(sale: Sale, items: SaleItem[], profile: StorePro
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.text(profile.business_name || "Store", width / 2, y, { align: "center" });
+  doc.text(text(profile.business_name) || "Store", width / 2, y, { align: "center" });
   y += 5;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  if (profile.gstin.trim()) {
+  if (text(profile.gstin)) {
     doc.text(`GSTIN: ${profile.gstin}`, width / 2, y, { align: "center" });
     y += 4;
   }
@@ -188,7 +192,7 @@ export function buildReceiptPdf(sale: Sale, items: SaleItem[], profile: StorePro
   y += 4;
   doc.text(formatDate(sale.sale_date), width / 2, y, { align: "center" });
   y += 4;
-  if (sale.customer_name.trim()) {
+  if (text(sale.customer_name)) {
     doc.text(sale.customer_name, width / 2, y, { align: "center" });
     y += 4;
   }
@@ -218,7 +222,7 @@ export function buildReceiptPdf(sale: Sale, items: SaleItem[], profile: StorePro
   const words = doc.splitTextToSize(amountInWords(asPaise(sale.grand_total), currency), width - 8);
   doc.text(words, 4, y);
   y += words.length * 3.5 + 3;
-  if (profile.memo_footer.trim()) {
+  if (text(profile.memo_footer)) {
     const footer = doc.splitTextToSize(profile.memo_footer, width - 8);
     doc.setFont("helvetica", "italic");
     doc.text(footer, 4, y);

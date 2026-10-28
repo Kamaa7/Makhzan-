@@ -22,9 +22,13 @@ function draftKey(userId: string): string {
 }
 
 function asBigInt(value: unknown): bigint {
-  if (typeof value === "bigint") return value;
-  if (typeof value === "number" && Number.isFinite(value)) return BigInt(Math.trunc(value));
-  if (typeof value === "string" && value.trim() !== "") return BigInt(value);
+  try {
+    if (typeof value === "bigint") return value;
+    if (typeof value === "number" && Number.isFinite(value)) return BigInt(Math.trunc(value));
+    if (typeof value === "string" && value.trim() !== "") return BigInt(value);
+  } catch {
+    return 0n;
+  }
   return 0n;
 }
 

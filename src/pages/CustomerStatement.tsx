@@ -25,7 +25,10 @@ export function CustomerStatement() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id) {
+      setLoading(false);
+      return;
+    }
     try {
       const c = getCustomer(id);
       if (!c) {

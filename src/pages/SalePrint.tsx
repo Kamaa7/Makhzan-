@@ -101,7 +101,7 @@ function A4Body({ sale, items, profile }: { sale: Sale; items: SaleItem[]; profi
             {profile.phone}
             {profile.email ? ` · ${profile.email}` : ""}
           </p>
-          {profile.gstin.trim() && <p className="mt-1 text-sm font-semibold">GSTIN: {profile.gstin}</p>}
+          {(profile.gstin ?? "").trim() && <p className="mt-1 text-sm font-semibold">GSTIN: {profile.gstin}</p>}
         </div>
         <p className="text-xl font-semibold text-gray-900">
           <MemoHeading sale={sale} profile={profile} />
@@ -172,13 +172,13 @@ function ReceiptBody({ sale, items, profile }: { sale: Sale; items: SaleItem[]; 
   return (
     <article className="px-2 py-3 text-xs text-black">
       <h1 className="text-center text-sm font-bold">{profile.business_name || "Store"}</h1>
-      {profile.gstin.trim() ? <p className="text-center">GSTIN: {profile.gstin}</p> : null}
+      {(profile.gstin ?? "").trim() ? <p className="text-center">GSTIN: {profile.gstin}</p> : null}
       <p className="mt-1 text-center font-semibold">
         <MemoHeading sale={sale} profile={profile} />
       </p>
       <p className="text-center">{sale.doc_number}</p>
       <p className="text-center">{formatDate(sale.sale_date)}</p>
-      {sale.customer_name.trim() ? <p className="text-center">{sale.customer_name}</p> : null}
+      {(sale.customer_name ?? "").trim() ? <p className="text-center">{sale.customer_name}</p> : null}
       <table className="mt-2 w-full">
         <thead>
           <tr className="border-y border-black text-left">

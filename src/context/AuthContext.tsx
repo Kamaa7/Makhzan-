@@ -1,21 +1,10 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ensureStoreProfile, emptyProfile, restoreSession, signIn as dbSignIn, signOut as dbSignOut, signUp as dbSignUp } from "../db";
-import { clearSaleDraft } from "../lib/saleDraft";
-import type { AuthSession, AuthUser, StoreProfile } from "../lib/types";
+import type { AuthSession, StoreProfile } from "../lib/types";
+import { AuthContext, type AuthContextValue } from "./authContextBase";
 import { useDb } from "./DbContext";
 
-type AuthContextValue = {
-  session: AuthSession | null;
-  user: AuthUser | null;
-  profile: StoreProfile | null;
-  loading: boolean;
-  refreshProfile: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
-  signOut: () => Promise<void>;
-};
-
-const AuthContext = createContext<AuthContextValue | null>(null);
+export { useAuth } from "./authContextBase";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { ready, error: dbError } = useDb();
@@ -82,8 +71,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await applySession(await dbSignUp(email, password));
       },
       signOut: async () => {
-        const uid = session?.user.id;
-        if (uid) clearSaleDraft(uid);
         await dbSignOut();
         await applySession(null);
       },
@@ -94,8 +81,3 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
-}
