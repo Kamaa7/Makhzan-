@@ -1,4 +1,5 @@
 import { asPaise, computeSaleTotals } from "../lib/money";
+import { commitSalePayment, nextPaymentStatus } from "../lib/saleState";
 import type { DocType, PaymentMethod } from "../lib/types";
 import { requireUserId } from "./auth";
 import { getDb, newId, nowIso, oneRow, persistDb, refreshAutoBackup, runSql } from "./engine";
@@ -92,16 +93,9 @@ export async function createSale(input: {
   );
   if (asPaise(input.discount) > totals.subtotal) throw new Error("Discount cannot exceed subtotal");
 
-  let paid = asPaise(input.amount_paid);
-  let status: "paid" | "unpaid" | "partial";
-  if (input.doc_type === "cash_memo") {
-    paid = totals.grandTotal;
-    status = "paid";
-  } else {
-    if (paid < 0n) throw new Error("Amount paid cannot be negative");
-    if (paid > totals.grandTotal) throw new Error("Amount paid cannot exceed the total");
-    status = paid === 0n ? "unpaid" : paid === totals.grandTotal ? "paid" : "partial";
-  }
+  const settled = commitSalePayment(input.doc_type, asPaise(input.amount_paid), totals.grandTotal);
+  const paid = settled.amountPaid;
+  const status = settled.status;
 
   const saleId = newId();
   const stamp = nowIso();
@@ -226,11 +220,9 @@ export async function recordSalePayment(input: {
   const sale = oneRow("SELECT * FROM sales WHERE id = ?", [input.sale_id]);
   if (!sale || String(sale.user_id) !== uid) throw new Error("Sale not found");
 
-  const due = Number(sale.grand_total) - Number(sale.amount_paid);
-  if (input.amount > due) throw new Error("Payment would exceed the amount due");
-
-  const newPaid = Number(sale.amount_paid) + input.amount;
-  const status = newPaid === Number(sale.grand_total) ? "paid" : "partial";
+  const settled = nextPaymentStatus(asPaise(sale.amount_paid), asPaise(sale.grand_total), asPaise(input.amount));
+  const newPaid = settled.amountPaid;
+  const status = settled.status;
   const id = newId();
   const stamp = nowIso();
   runSql(
@@ -240,7 +232,7 @@ export async function recordSalePayment(input: {
   );
   runSql(
     `UPDATE sales SET amount_paid = ?, status = ?, payment_method = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
-    [newPaid, status, input.method, stamp, input.sale_id, uid],
+    [Number(newPaid), status, input.method, stamp, input.sale_id, uid],
   );
   await persistDb();
   await refreshAutoBackup();

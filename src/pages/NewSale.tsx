@@ -27,6 +27,12 @@ import { listParkedBills, parkBill, takeParkedBill, type ParkedBill } from "../l
 import { clearSaleDraft, loadSaleDraft, saveSaleDraft, type SaleDraft } from "../lib/saleDraft";
 import type { CounterLine, Customer, DocType, PaymentMethod, Product } from "../lib/types";
 
+type CounterGate =
+  | { kind: "edit" }
+  | { kind: "confirm-clear" }
+  | { kind: "confirm-resume"; bill: ParkedBill }
+  | { kind: "saving" };
+
 function isKeeperField(el: EventTarget | null, scanEl: HTMLElement | null): boolean {
   if (!(el instanceof HTMLElement) || el === scanEl) return false;
   if (el.isContentEditable) return true;
@@ -60,13 +66,11 @@ export function NewSale() {
   const [notes, setNotes] = useState("");
   const [cashReceivedRaw, setCashReceivedRaw] = useState("");
   const [search, setSearch] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [confirmClear, setConfirmClear] = useState(false);
+  const [gate, setGate] = useState<CounterGate>({ kind: "edit" });
   const [draftReady, setDraftReady] = useState(false);
   const [restoredDraft, setRestoredDraft] = useState(false);
   const [scannerReady, setScannerReady] = useState(true);
   const [parked, setParked] = useState<ParkedBill[]>([]);
-  const [resumeTarget, setResumeTarget] = useState<ParkedBill | null>(null);
   const [lastSaleId, setLastSaleIdState] = useState<string | null>(null);
   const skipDraftSave = useRef(true);
 
@@ -219,7 +223,10 @@ export function NewSale() {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   };
 
+  const editing = gate.kind === "edit";
+
   const save = async (andPrint: boolean) => {
+    if (!editing) return;
     if (lines.length === 0) {
       push("Add at least one item", "error");
       return;
@@ -249,7 +256,7 @@ export function NewSale() {
       push("Amount paid cannot exceed the total", "error");
       return;
     }
-    setBusy(true);
+    setGate({ kind: "saving" });
     try {
       const id = await createSale({
         doc_type: docType,
@@ -284,7 +291,7 @@ export function NewSale() {
     } catch (err) {
       push(err instanceof Error ? err.message : "Could not save sale", "error");
     } finally {
-      setBusy(false);
+      setGate({ kind: "edit" });
     }
   };
 
@@ -330,7 +337,7 @@ export function NewSale() {
   };
 
   const parkCurrent = () => {
-    if (isDialogOpen() || busy) return;
+    if (!editing || isDialogOpen()) return;
     if (lines.length === 0) {
       push("Add at least one item before parking", "error");
       return;
@@ -349,8 +356,9 @@ export function NewSale() {
   };
 
   const resumeParked = (row: ParkedBill) => {
+    if (!editing) return;
     if (lines.length > 0) {
-      setResumeTarget(row);
+      setGate({ kind: "confirm-resume", bill: row });
       return;
     }
     const taken = takeParkedBill(userId, row.id);
@@ -393,7 +401,8 @@ export function NewSale() {
   ]);
 
   const requestClear = () => {
-    if (dirty) setConfirmClear(true);
+    if (!editing) return;
+    if (dirty) setGate({ kind: "confirm-clear" });
     else clearBill();
   };
 
@@ -434,7 +443,7 @@ export function NewSale() {
       match: (e) => isFKey(e, 8) || isCtrlEnter(e),
       preventDefault: true,
       run: () => {
-        if (isDialogOpen() || busy) return;
+        if (!editing || isDialogOpen()) return;
         void save(false);
       },
     },
@@ -442,7 +451,7 @@ export function NewSale() {
       match: (e) => isFKey(e, 9),
       preventDefault: true,
       run: () => {
-        if (isDialogOpen() || busy) return;
+        if (!editing || isDialogOpen()) return;
         void save(true);
       },
     },
@@ -783,15 +792,15 @@ export function NewSale() {
             <p className="text-xs text-red-700">Save is blocked until quantities fit on-hand stock.</p>
           )}
           <div className="flex flex-col gap-2">
-            <button type="button" className="btn-primary" disabled={busy} onClick={() => save(false)}>
+            <button type="button" className="btn-primary" disabled={!editing} onClick={() => save(false)}>
               <Bi k="save" />
               <ShortcutHint keys="F8" />
             </button>
-            <button type="button" className="btn-secondary" disabled={busy} onClick={() => save(true)}>
+            <button type="button" className="btn-secondary" disabled={!editing} onClick={() => save(true)}>
               <Bi k="saveAndPrint" />
               <ShortcutHint keys="F9" />
             </button>
-            <button type="button" className="btn-secondary" disabled={busy} onClick={parkCurrent}>
+            <button type="button" className="btn-secondary" disabled={!editing} onClick={parkCurrent}>
               <Bi k="park" />
               <ShortcutHint keys="Alt+P" />
             </button>
@@ -803,30 +812,30 @@ export function NewSale() {
         </aside>
       </div>
       <ConfirmDialog
-        open={confirmClear}
+        open={gate.kind === "confirm-clear"}
         title="Clear this bill?"
         message="Items, discount, payment, notes, and walk-in details will be removed."
         confirmLabel="Clear"
         danger
         onConfirm={clearBill}
-        onClose={() => setConfirmClear(false)}
+        onClose={() => setGate({ kind: "edit" })}
       />
       <ConfirmDialog
-        open={Boolean(resumeTarget)}
+        open={gate.kind === "confirm-resume"}
         title="Replace this bill?"
         message="The counter already has lines. Resume will replace them with the parked bill."
         confirmLabel="Resume"
         danger
         onConfirm={() => {
-          if (!resumeTarget) return;
-          const taken = takeParkedBill(userId, resumeTarget.id);
+          if (gate.kind !== "confirm-resume") return;
+          const taken = takeParkedBill(userId, gate.bill.id);
           if (taken) {
             applyDraft(taken.draft);
             setParked(listParkedBills(userId));
             setRestoredDraft(true);
           }
         }}
-        onClose={() => setResumeTarget(null)}
+        onClose={() => setGate({ kind: "edit" })}
       />
     </div>
   );

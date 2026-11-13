@@ -20,8 +20,8 @@ function Guard() {
   const { session, loading } = useAuth();
   const { ready, error } = useDb();
   if (error) return <BootScreen message="Local database failed to open." error={error} />;
-  if (!session) return <Navigate to="/signin" replace />;
   if (loading || !ready) return <BootScreen message="Opening Makhzan…" />;
+  if (!session) return <Navigate to="/signin" replace />;
   return <Outlet />;
 }
 

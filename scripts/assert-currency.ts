@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { amountInWords } from "../src/lib/amountInWords";
 import { computeSaleTotals, formatMoney, getCurrency, parseMajorInput, roundOffStep, roundToNearestStep } from "../src/lib/money";
+import { commitSalePayment, nextPaymentStatus, salePaymentStatus, stockChange } from "../src/lib/saleState";
+import { stepScan } from "../src/lib/scanMachine";
 
 assert.equal(getCurrency("INR").decimals, 2);
 assert.equal(getCurrency("AED").decimals, 2);
@@ -46,6 +48,24 @@ const kwdRound = computeSaleTotals([{ qty: 1, unitPrice: 1250n, taxRate: 0 }], 0
 assert.equal(kwdRound.exactTotal, 1250n);
 assert.equal(kwdRound.grandTotal, 1000n);
 assert.equal(kwdRound.roundOff, -250n);
+
+assert.equal(salePaymentStatus(0n, 100n), "unpaid");
+assert.equal(salePaymentStatus(40n, 100n), "partial");
+assert.equal(salePaymentStatus(100n, 100n), "paid");
+assert.deepEqual(commitSalePayment("cash_memo", 0n, 1100n), { amountPaid: 1100n, status: "paid" });
+assert.deepEqual(commitSalePayment("bill", 0n, 1100n), { amountPaid: 0n, status: "unpaid" });
+assert.deepEqual(nextPaymentStatus(400n, 1100n, 700n), { amountPaid: 1100n, status: "paid" });
+assert.throws(() => nextPaymentStatus(400n, 1100n, 800n));
+assert.deepEqual(stockChange("remove", 2), { change: -2, reason: "adjustment" });
+assert.deepEqual(stockChange("purchase", 2), { change: 2, reason: "purchase" });
+
+let scan = stepScan({ kind: "idle", at: 0 }, { type: "key", key: "8", now: 1000 });
+scan = stepScan(scan.state, { type: "key", key: "9", now: 1020 });
+assert.equal(scan.state.kind, "gun");
+scan = stepScan(scan.state, { type: "key", key: "0", now: 1040 });
+const done = stepScan(scan.state, { type: "enter", now: 1060 });
+assert.equal(done.emit, "890");
+assert.equal(done.state.kind, "idle");
 
 console.log("currency asserts ok");
 console.log("  INR 105000 minor ->", inr, "|", amountInWords(105000n, "INR"));

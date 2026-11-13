@@ -10,6 +10,7 @@ import { useShortcuts } from "../hooks/useShortcuts";
 import { isCtrlKey, isDialogOpen, isFKey } from "../lib/shortcuts";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
+import { stockChange, type StockIntent } from "../lib/saleState";
 import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
 import { UNITS } from "../lib/constants";
 import { formatQty } from "../lib/format";
@@ -496,8 +497,7 @@ function StockModal({
   onChanged: () => Promise<void>;
 }) {
   const { push } = useToast();
-  const [mode, setMode] = useState<"add" | "remove">("add");
-  const [reason, setReason] = useState<"purchase" | "return" | "adjustment">("purchase");
+  const [intent, setIntent] = useState<StockIntent>("purchase");
   const [qty, setQty] = useState("");
   const [note, setNote] = useState("");
   const [history, setHistory] = useState<StockMovement[]>([]);
@@ -518,14 +518,13 @@ function StockModal({
       push("Enter a quantity greater than zero", "error");
       return;
     }
-    const change = mode === "remove" ? -n : n;
-    const rpcReason = mode === "remove" ? "adjustment" : reason;
+    const { change, reason } = stockChange(intent, n);
     setBusy(true);
     try {
       await adjustStock({
         product_id: product.id,
         change_qty: change,
-        reason: rpcReason,
+        reason,
         note,
       });
       push("Stock updated", "success");
@@ -547,29 +546,30 @@ function StockModal({
       </p>
       <form className="mb-6 grid gap-3 sm:grid-cols-2" onSubmit={apply}>
         <div className="flex gap-2">
-          <button type="button" className={mode === "add" ? "btn-primary" : "btn-secondary"} onClick={() => setMode("add")}>
+          <button
+            type="button"
+            className={intent !== "remove" ? "btn-primary" : "btn-secondary"}
+            onClick={() => setIntent((prev) => (prev === "remove" ? "purchase" : prev))}
+          >
             Add
           </button>
           <button
             type="button"
-            className={mode === "remove" ? "btn-primary" : "btn-secondary"}
-            onClick={() => {
-              setMode("remove");
-              setReason("adjustment");
-            }}
+            className={intent === "remove" ? "btn-primary" : "btn-secondary"}
+            onClick={() => setIntent("remove")}
           >
             Remove
           </button>
         </div>
-        {mode === "add" ? (
+        {intent !== "remove" ? (
           <select
             className="input-field"
-            value={reason}
-            onChange={(e) => setReason(e.target.value as "purchase" | "return" | "adjustment")}
+            value={intent}
+            onChange={(e) => setIntent(e.target.value as StockIntent)}
           >
             <option value="purchase">Purchase</option>
             <option value="return">Customer return</option>
-            <option value="adjustment">Correction</option>
+            <option value="correction">Correction</option>
           </select>
         ) : (
           <p className="self-center text-sm text-slate-500">Recorded as an adjustment.</p>
