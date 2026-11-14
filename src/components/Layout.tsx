@@ -155,7 +155,7 @@ export function Layout() {
           </div>
           <div className="flex items-center gap-3">
             <button type="button" className="btn-ghost text-sm" onClick={() => setHelpOpen(true)}>
-              Shortcuts
+              Help
               <ShortcutHint keys="F1" />
             </button>
             <button

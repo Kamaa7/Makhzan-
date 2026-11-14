@@ -51,7 +51,7 @@ export const SHORTCUT_SECTIONS: { title: string; rows: { keys: string; action: s
   {
     title: "Everywhere",
     rows: [
-      { keys: "F1", action: "Open this list" },
+      { keys: "F1", action: "Open help" },
       { keys: "Alt+1", action: "Home" },
       { keys: "Alt+2", action: "New Sale" },
       { keys: "Alt+3", action: "Sales Register" },
