@@ -56,6 +56,222 @@ export const AR = {
 } as const;
 
 export type ArKey = keyof typeof AR;
+export type LangCode = "en" | "hi" | "ar" | "tr" | "fa";
+
+export type ShopLanguage = {
+  id: string;
+  country: string;
+  lang: LangCode;
+  native: string;
+  dir: "ltr" | "rtl";
+};
+
+/** One choice per shop country. English stays available on its own. */
+export const SHOP_LANGUAGES: ShopLanguage[] = [
+  { id: "en", country: "English", lang: "en", native: "English", dir: "ltr" },
+  { id: "IN", country: "India", lang: "hi", native: "हिन्दी", dir: "ltr" },
+  { id: "AE", country: "United Arab Emirates", lang: "ar", native: "العربية", dir: "rtl" },
+  { id: "SA", country: "Saudi Arabia", lang: "ar", native: "العربية", dir: "rtl" },
+  { id: "QA", country: "Qatar", lang: "ar", native: "العربية", dir: "rtl" },
+  { id: "KW", country: "Kuwait", lang: "ar", native: "العربية", dir: "rtl" },
+  { id: "BH", country: "Bahrain", lang: "ar", native: "العربية", dir: "rtl" },
+  { id: "OM", country: "Oman", lang: "ar", native: "العربية", dir: "rtl" },
+  { id: "JO", country: "Jordan", lang: "ar", native: "العربية", dir: "rtl" },
+  { id: "EG", country: "Egypt", lang: "ar", native: "العربية", dir: "rtl" },
+  { id: "IQ", country: "Iraq", lang: "ar", native: "العربية", dir: "rtl" },
+  { id: "LB", country: "Lebanon", lang: "ar", native: "العربية", dir: "rtl" },
+  { id: "SY", country: "Syria", lang: "ar", native: "العربية", dir: "rtl" },
+  { id: "YE", country: "Yemen", lang: "ar", native: "العربية", dir: "rtl" },
+  { id: "TR", country: "Turkey", lang: "tr", native: "Türkçe", dir: "ltr" },
+  { id: "IR", country: "Iran", lang: "fa", native: "فارسی", dir: "rtl" },
+];
+
+const HI: Record<ArKey, string> = {
+  home: "होम",
+  newSale: "नई बिक्री",
+  salesRegister: "बिक्री रजिस्टर",
+  productsStock: "उत्पाद और स्टॉक",
+  customers: "ग्राहक",
+  storeProfile: "दुकान प्रोफ़ाइल",
+  settings: "सेटिंग्स",
+  signOut: "साइन आउट",
+  cashMemo: "कैश मेमो",
+  bill: "बिल",
+  taxInvoice: "टैक्स इनवॉइस",
+  park: "रोकें",
+  save: "सहेजें",
+  saveAndPrint: "सहेजें और प्रिंट",
+  clear: "साफ़ करें",
+  subtotal: "उप-योग",
+  discount: "छूट",
+  tax: "कर",
+  roundOff: "राउंड ऑफ़",
+  grandTotal: "कुल योग",
+  paid: "भुगतान",
+  due: "बकाया",
+  change: "वापसी",
+  scannerReady: "स्कैनर तैयार है",
+  scannerPaused: "स्कैनर रुका हुआ है",
+  dayClose: "दिन समाप्ति",
+  collectedToday: "आज की वसूली",
+  stillDue: "अभी बकाया",
+  markDayReviewed: "दिन की समीक्षा करें",
+  reviewed: "समीक्षा हुई",
+  lastBackup: "आखिरी बैकअप",
+  saveBackup: "बैकअप सहेजें",
+  cash: "नकद",
+  upi: "UPI",
+  card: "कार्ड",
+  bank: "बैंक",
+  cheque: "चेक",
+  other: "अन्य",
+  statement: "खाता विवरण",
+  bills: "बिल",
+  payments: "भुगतान",
+  balance: "शेष",
+  newBill: "नया बिल",
+  printLabel: "लेबल प्रिंट",
+  total: "कुल",
+  date: "तारीख",
+  number: "नंबर",
+  type: "प्रकार",
+  status: "स्थिति",
+  amount: "राशि",
+  method: "तरीका",
+  note: "नोट",
+  copies: "प्रतियाँ",
+  print: "प्रिंट",
+};
+
+const TR: Record<ArKey, string> = {
+  home: "Ana sayfa",
+  newSale: "Yeni satış",
+  salesRegister: "Satış defteri",
+  productsStock: "Ürünler ve stok",
+  customers: "Müşteriler",
+  storeProfile: "Mağaza profili",
+  settings: "Ayarlar",
+  signOut: "Çıkış",
+  cashMemo: "Kasa fişi",
+  bill: "Fatura",
+  taxInvoice: "Vergi faturası",
+  park: "Beklet",
+  save: "Kaydet",
+  saveAndPrint: "Kaydet ve yazdır",
+  clear: "Temizle",
+  subtotal: "Ara toplam",
+  discount: "İndirim",
+  tax: "Vergi",
+  roundOff: "Yuvarlama",
+  grandTotal: "Genel toplam",
+  paid: "Ödenen",
+  due: "Kalan",
+  change: "Para üstü",
+  scannerReady: "Tarayıcı hazır",
+  scannerPaused: "Tarayıcı durdu",
+  dayClose: "Gün kapanışı",
+  collectedToday: "Bugün tahsil edilen",
+  stillDue: "Hâlâ borç",
+  markDayReviewed: "Günü incelendi işaretle",
+  reviewed: "İncelendi",
+  lastBackup: "Son yedek",
+  saveBackup: "Yedeği kaydet",
+  cash: "Nakit",
+  upi: "UPI",
+  card: "Kart",
+  bank: "Banka",
+  cheque: "Çek",
+  other: "Diğer",
+  statement: "Hesap özeti",
+  bills: "Faturalar",
+  payments: "Ödemeler",
+  balance: "Bakiye",
+  newBill: "Yeni fatura",
+  printLabel: "Etiket yazdır",
+  total: "Toplam",
+  date: "Tarih",
+  number: "Numara",
+  type: "Tür",
+  status: "Durum",
+  amount: "Tutar",
+  method: "Yöntem",
+  note: "Not",
+  copies: "Kopya",
+  print: "Yazdır",
+};
+
+const FA: Record<ArKey, string> = {
+  home: "خانه",
+  newSale: "فروش جدید",
+  salesRegister: "دفتر فروش",
+  productsStock: "کالا و موجودی",
+  customers: "مشتریان",
+  storeProfile: "مشخصات فروشگاه",
+  settings: "تنظیمات",
+  signOut: "خروج",
+  cashMemo: "رسید نقدی",
+  bill: "صورتحساب",
+  taxInvoice: "فاکتور مالیاتی",
+  park: "نگه‌داشتن",
+  save: "ذخیره",
+  saveAndPrint: "ذخیره و چاپ",
+  clear: "پاک کردن",
+  subtotal: "جمع جزء",
+  discount: "تخفیف",
+  tax: "مالیات",
+  roundOff: "رند",
+  grandTotal: "جمع کل",
+  paid: "پرداخت‌شده",
+  due: "مانده",
+  change: "باقی‌مانده",
+  scannerReady: "اسکنر آماده است",
+  scannerPaused: "اسکنر متوقف است",
+  dayClose: "بستن روز",
+  collectedToday: "دریافتی امروز",
+  stillDue: "هنوز مانده",
+  markDayReviewed: "روز بررسی شد",
+  reviewed: "بررسی شد",
+  lastBackup: "آخرین پشتیبان",
+  saveBackup: "ذخیره پشتیبان",
+  cash: "نقد",
+  upi: "UPI",
+  card: "کارت",
+  bank: "بانک",
+  cheque: "چک",
+  other: "سایر",
+  statement: "صورتحساب",
+  bills: "فاکتورها",
+  payments: "پرداخت‌ها",
+  balance: "مانده",
+  newBill: "فاکتور جدید",
+  printLabel: "چاپ برچسب",
+  total: "جمع",
+  date: "تاریخ",
+  number: "شماره",
+  type: "نوع",
+  status: "وضعیت",
+  amount: "مبلغ",
+  method: "روش",
+  note: "یادداشت",
+  copies: "نسخه",
+  print: "چاپ",
+};
+
+const DICTS: Record<Exclude<LangCode, "en">, Record<ArKey, string>> = {
+  hi: HI,
+  ar: AR,
+  tr: TR,
+  fa: FA,
+};
+
+export function shopLanguage(id: string): ShopLanguage {
+  return SHOP_LANGUAGES.find((item) => item.id === id) ?? SHOP_LANGUAGES[0];
+}
+
+export function labelIn(lang: LangCode, key: ArKey): string | null {
+  if (lang === "en") return null;
+  return DICTS[lang][key];
+}
 
 export const EN: Record<ArKey, string> = {
   home: "Home",
@@ -114,23 +330,26 @@ export const EN: Record<ArKey, string> = {
   print: "Print",
 };
 
-export function arabicStorageKey(userId: string): string {
-  return `makhzan.arabic.${userId}`;
+function languageStorageKey(userId: string): string {
+  return `makhzan.lang.${userId}`;
 }
 
-export function readArabicOn(userId: string): boolean {
-  if (!userId) return false;
+export function readLanguageId(userId: string): string {
+  if (!userId) return "en";
   try {
-    return localStorage.getItem(arabicStorageKey(userId)) === "1";
+    const saved = localStorage.getItem(languageStorageKey(userId));
+    if (saved && SHOP_LANGUAGES.some((item) => item.id === saved)) return saved;
+    if (localStorage.getItem(`makhzan.arabic.${userId}`) === "1") return "AE";
   } catch {
-    return false;
+    /* ignore */
   }
+  return "en";
 }
 
-export function writeArabicOn(userId: string, on: boolean): void {
+export function writeLanguageId(userId: string, id: string): void {
   if (!userId) return;
   try {
-    localStorage.setItem(arabicStorageKey(userId), on ? "1" : "0");
+    localStorage.setItem(languageStorageKey(userId), shopLanguage(id).id);
   } catch {
     /* ignore quota */
   }

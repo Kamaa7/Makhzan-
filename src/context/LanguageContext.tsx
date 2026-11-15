@@ -1,10 +1,11 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { readArabicOn, writeArabicOn } from "../lib/i18n";
+import { readLanguageId, shopLanguage, writeLanguageId, type ShopLanguage } from "../lib/i18n";
 import { useAuth } from "./AuthContext";
 
 type LanguageContextValue = {
-  arabic: boolean;
-  toggleArabic: () => void;
+  languageId: string;
+  language: ShopLanguage;
+  setLanguage: (id: string) => void;
 };
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
@@ -12,24 +13,23 @@ const LanguageContext = createContext<LanguageContextValue | null>(null);
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const userId = user?.id ?? "";
-  const [arabic, setArabic] = useState(false);
+  const [languageId, setLanguageId] = useState("en");
 
   useEffect(() => {
-    setArabic(readArabicOn(userId));
+    setLanguageId(readLanguageId(userId));
   }, [userId]);
 
   const value = useMemo<LanguageContextValue>(
     () => ({
-      arabic,
-      toggleArabic: () => {
-        setArabic((prev) => {
-          const next = !prev;
-          writeArabicOn(userId, next);
-          return next;
-        });
+      languageId,
+      language: shopLanguage(languageId),
+      setLanguage: (id: string) => {
+        const next = shopLanguage(id).id;
+        setLanguageId(next);
+        writeLanguageId(userId, next);
       },
     }),
-    [arabic, userId],
+    [languageId, userId],
   );
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;

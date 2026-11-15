@@ -4,7 +4,6 @@ import {
   Bars3Icon,
   BuildingStorefrontIcon,
   ClipboardDocumentListIcon,
-  Cog6ToothIcon,
   CubeIcon,
   HomeIcon,
   ShoppingBagIcon,
@@ -14,11 +13,12 @@ import {
 import { useState, type ComponentType, type SVGProps } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { useLanguage } from "../context/LanguageContext";
 import { useShortcuts } from "../hooks/useShortcuts";
 import type { ArKey } from "../lib/i18n";
 import { isAltDigit, isFKey } from "../lib/shortcuts";
 import { Bi } from "./Bi";
+import { LanguageSelect } from "./LanguageSelect";
+import { SettingsButton, SettingsDialog } from "./SettingsMenu";
 import { ShortcutHint, ShortcutsDialog } from "./ShortcutsDialog";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -50,7 +50,7 @@ function navClass(active: boolean) {
   }`;
 }
 
-function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarNav({ onNavigate, onOpenSettings }: { onNavigate?: () => void; onOpenSettings: () => void }) {
   return (
     <>
       <div className="flex items-center gap-3 px-4 py-5">
@@ -77,14 +77,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         ))}
       </nav>
       <div className="mt-auto border-t border-gray-200 px-2 py-3">
-        <NavLink to="/store" onClick={onNavigate} className={({ isActive }) => navClass(isActive)}>
-          {({ isActive }) => (
-            <>
-              <Cog6ToothIcon className={`mt-0.5 h-5 w-5 shrink-0 ${isActive ? "text-white" : "text-black"}`} />
-              <Bi k="settings" mutedClass={isActive ? "text-gray-300" : "text-gray-500"} />
-            </>
-          )}
-        </NavLink>
+        <SettingsButton variant="nav" onOpen={onOpenSettings} />
       </div>
     </>
   );
@@ -94,11 +87,17 @@ const ALT_ROUTES = ["/", "/sale", "/sales", "/products", "/customers", "/store"]
 
 export function Layout() {
   const { user, signOut } = useAuth();
-  const { arabic, toggleArabic } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const openSettings = () => {
+    setMobileOpen(false);
+    setHelpOpen(false);
+    setSettingsOpen(true);
+  };
 
   const go = (to: string) => {
     setHelpOpen(false);
@@ -123,7 +122,7 @@ export function Layout() {
   return (
     <div className="min-h-screen lg:flex">
       <aside className="no-print hidden w-64 shrink-0 flex-col border-r border-gray-200 bg-white lg:flex">
-        <SidebarNav />
+        <SidebarNav onOpenSettings={openSettings} />
       </aside>
 
       <Dialog open={mobileOpen} onClose={setMobileOpen} className="relative z-50 lg:hidden">
@@ -135,7 +134,7 @@ export function Layout() {
                 <XMarkIcon className="h-5 w-5" />
               </button>
             </div>
-            <SidebarNav onNavigate={() => setMobileOpen(false)} />
+            <SidebarNav onNavigate={() => setMobileOpen(false)} onOpenSettings={openSettings} />
           </DialogPanel>
         </div>
       </Dialog>
@@ -154,19 +153,12 @@ export function Layout() {
             <h1 className="text-lg font-semibold text-gray-900">{pageTitle(location.pathname)}</h1>
           </div>
           <div className="flex items-center gap-3">
+            <SettingsButton onOpen={openSettings} />
             <button type="button" className="btn-ghost text-sm" onClick={() => setHelpOpen(true)}>
               Help
               <ShortcutHint keys="F1" />
             </button>
-            <button
-              type="button"
-              className={`rounded-md px-2.5 py-1 text-sm font-medium ${arabic ? "bg-black text-white" : "text-gray-700 hover:bg-gray-100"}`}
-              aria-pressed={arabic}
-              title="Arabic beside English"
-              onClick={toggleArabic}
-            >
-              عربي
-            </button>
+            <LanguageSelect className="max-w-[11rem]" />
             <p className="hidden truncate text-sm text-slate-500 sm:block">{user?.email}</p>
             <button type="button" className="btn-outline items-start text-sm" onClick={leave}>
               <ArrowRightOnRectangleIcon className="mt-0.5 h-4 w-4 shrink-0" />
@@ -180,6 +172,7 @@ export function Layout() {
           </div>
         </main>
       </div>
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <ShortcutsDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );

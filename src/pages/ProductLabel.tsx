@@ -2,6 +2,7 @@ import JsBarcode from "jsbarcode";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Bi } from "../components/Bi";
+import { SettingsButton } from "../components/SettingsMenu";
 import { PageHeader } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -82,6 +83,7 @@ export function ProductLabel() {
               <Link to="/products" className="btn-secondary">
                 Back
               </Link>
+              <SettingsButton variant="toolbar" />
             </div>
           }
         />

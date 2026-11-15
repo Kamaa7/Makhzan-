@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Bi } from "../components/Bi";
+import { SettingsButton } from "../components/SettingsMenu";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { amountInWords } from "../lib/amountInWords";
@@ -78,6 +79,7 @@ export function SalePrint() {
         <Link className={`btn-outline ${is80 ? "bg-gray-100" : ""}`} to={printQuery(true)}>
           Receipt
         </Link>
+        <SettingsButton variant="toolbar" />
         <Link className="btn-outline" to={`/sales/${sale.id}`}>
           Back to sale
         </Link>
