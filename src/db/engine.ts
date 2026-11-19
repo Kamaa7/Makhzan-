@@ -5,13 +5,52 @@ import schemaSql from "./schema.sql?raw";
 const IDB_NAME = "makhzan";
 const IDB_STORE = "sqlite";
 const IDB_KEY = "db";
+const IDB_GEN_KEY = "gen";
 const IDB_BACKUP_KEY = "backup";
 const IDB_BACKUP_AT_KEY = "backupAt";
 const LS_BACKUP_AT = "makhzan.lastBackupAt";
+const SHOP_CHANNEL = "makhzan-shop";
+
+class ShopChangedError extends Error {
+  constructor() {
+    super("Another window saved the shop. Reload this window before you continue.");
+    this.name = "ShopChangedError";
+  }
+}
+
+function isShopChangedError(err: unknown): boolean {
+  return err instanceof ShopChangedError;
+}
 
 let SQL: SqlJsStatic | null = null;
 let db: Database | null = null;
+let loadedGeneration = 0;
+let stale = false;
+let watchReady = false;
 let persistTail: Promise<void> = Promise.resolve();
+let shopChannel: BroadcastChannel | null = null;
+
+function watchOtherWindows(): void {
+  if (shopChannel || typeof BroadcastChannel === "undefined") return;
+  shopChannel = new BroadcastChannel(SHOP_CHANNEL);
+  shopChannel.onmessage = (event: MessageEvent<{ generation?: unknown }>) => {
+    if (!watchReady) return;
+    const generation = event.data?.generation;
+    if (typeof generation !== "number" || generation === loadedGeneration) return;
+    markStale();
+  };
+}
+
+function publishGeneration(generation: number): void {
+  loadedGeneration = generation;
+  shopChannel?.postMessage({ generation });
+}
+
+function markStale(): void {
+  if (stale) return;
+  stale = true;
+  window.dispatchEvent(new Event("makhzan-shop-changed"));
+}
 
 function openIdb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -25,31 +64,117 @@ function openIdb(): Promise<IDBDatabase> {
   });
 }
 
-async function idbGet(): Promise<Uint8Array | null> {
+function toBytes(value: unknown): Uint8Array | null {
+  if (value instanceof Uint8Array) return value;
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (ArrayBuffer.isView(value)) {
+    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  }
+  return null;
+}
+
+function readGeneration(value: unknown): number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : 0;
+}
+
+async function idbReadSnapshot(): Promise<{ bytes: Uint8Array | null; generation: number }> {
   const idb = await openIdb();
   return new Promise((resolve, reject) => {
     const tx = idb.transaction(IDB_STORE, "readonly");
-    const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
-    req.onsuccess = () => {
-      const value = req.result;
-      resolve(value instanceof Uint8Array ? value : value ? new Uint8Array(value) : null);
+    const store = tx.objectStore(IDB_STORE);
+    const dbReq = store.get(IDB_KEY);
+    const genReq = store.get(IDB_GEN_KEY);
+    let bytes: Uint8Array | null = null;
+    let generation = 0;
+    dbReq.onsuccess = () => {
+      bytes = toBytes(dbReq.result);
     };
-    req.onerror = () => reject(req.error ?? new Error("Could not read local database"));
-    tx.oncomplete = () => idb.close();
+    genReq.onsuccess = () => {
+      generation = readGeneration(genReq.result);
+    };
+    tx.oncomplete = () => {
+      idb.close();
+      resolve({ bytes, generation });
+    };
+    tx.onerror = () => {
+      idb.close();
+      reject(tx.error ?? new Error("Could not read local database"));
+    };
   });
 }
 
-async function idbPut(bytes: Uint8Array): Promise<void> {
-  const idb = await openIdb();
-  return new Promise((resolve, reject) => {
-    const tx = idb.transaction(IDB_STORE, "readwrite");
-    tx.objectStore(IDB_STORE).put(bytes, IDB_KEY);
-    tx.oncomplete = () => {
-      idb.close();
-      resolve();
-    };
-    tx.onerror = () => reject(tx.error ?? new Error("Could not save local database"));
-  });
+function settleTransaction<T>(
+  idb: IDBDatabase,
+  tx: IDBTransaction,
+  resolve: (value: T) => void,
+  reject: (err: Error) => void,
+): { finish: (value: T) => void; fail: (err: Error) => void; reason: { current: Error | null } } {
+  let settled = false;
+  const reason = { current: null as Error | null };
+  const fail = (err: Error) => {
+    if (settled) return;
+    settled = true;
+    idb.close();
+    reject(err);
+  };
+  const finish = (value: T) => {
+    if (settled) return;
+    settled = true;
+    idb.close();
+    resolve(value);
+  };
+  tx.onerror = (event) => {
+    event.preventDefault();
+    fail(reason.current ?? tx.error ?? new Error("Could not save local database"));
+  };
+  return { finish, fail, reason };
+}
+
+/** Write the shop file only when this window still holds the generation it loaded. */
+function idbCompareAndPut(bytes: Uint8Array, expected: number): Promise<number> {
+  return openIdb().then(
+    (idb) =>
+      new Promise((resolve, reject) => {
+        const tx = idb.transaction(IDB_STORE, "readwrite");
+        const { finish, fail, reason } = settleTransaction<number>(idb, tx, resolve, reject);
+        const store = tx.objectStore(IDB_STORE);
+        const genReq = store.get(IDB_GEN_KEY);
+        genReq.onsuccess = () => {
+          const current = readGeneration(genReq.result);
+          if (current !== expected) {
+            reason.current = new ShopChangedError();
+            tx.abort();
+            fail(reason.current);
+            return;
+          }
+          store.put(bytes, IDB_KEY);
+          store.put(expected + 1, IDB_GEN_KEY);
+        };
+        genReq.onerror = () => fail(genReq.error ?? new Error("Could not read the shop file"));
+        tx.oncomplete = () => finish(expected + 1);
+      }),
+  );
+}
+
+/** Import replaces the shop on this computer, so it takes the next generation. */
+function idbForcePut(bytes: Uint8Array): Promise<number> {
+  return openIdb().then(
+    (idb) =>
+      new Promise((resolve, reject) => {
+        const tx = idb.transaction(IDB_STORE, "readwrite");
+        const { finish, fail } = settleTransaction<number>(idb, tx, resolve, reject);
+        const store = tx.objectStore(IDB_STORE);
+        let next = 1;
+        const genReq = store.get(IDB_GEN_KEY);
+        genReq.onsuccess = () => {
+          next = readGeneration(genReq.result) + 1;
+          store.put(bytes, IDB_KEY);
+          store.put(next, IDB_GEN_KEY);
+        };
+        genReq.onerror = () => fail(genReq.error ?? new Error("Could not read the shop file"));
+        tx.oncomplete = () => finish(next);
+      }),
+  );
 }
 
 async function loadInitSqlJs(): Promise<(config?: object) => Promise<SqlJsStatic>> {
@@ -68,23 +193,45 @@ async function getSql(): Promise<SqlJsStatic> {
   return SQL;
 }
 
-function migrateSalesRoundOff(database: Database): void {
+function migrateSalesRoundOff(database: Database): boolean {
   const info = database.exec("PRAGMA table_info(sales)");
   const names = (info[0]?.values ?? []).map((row) => String(row[1]));
   if (!names.includes("round_off")) {
     database.run("ALTER TABLE sales ADD COLUMN round_off INTEGER NOT NULL DEFAULT 0");
+    return true;
   }
+  return false;
+}
+
+function openShop(sql: SqlJsStatic, bytes: Uint8Array | null): Database {
+  const database = bytes ? new sql.Database(bytes) : new sql.Database();
+  database.run("PRAGMA foreign_keys = ON");
+  return database;
 }
 
 export async function initDb(): Promise<void> {
   if (db) return;
+  watchOtherWindows();
   const sql = await getSql();
-  const saved = await idbGet();
-  db = saved ? new sql.Database(saved) : new sql.Database();
-  db.run("PRAGMA foreign_keys = ON");
+  const saved = await idbReadSnapshot();
+  db = openShop(sql, saved.bytes);
+  loadedGeneration = saved.generation;
   db.exec(schemaSql);
-  migrateSalesRoundOff(db);
-  await persistDb();
+  const migrated = migrateSalesRoundOff(db);
+  if (!saved.bytes || migrated) {
+    try {
+      publishGeneration(await idbCompareAndPut(db.export(), loadedGeneration));
+    } catch (err) {
+      if (!isShopChangedError(err)) throw err;
+      db.close();
+      const latest = await idbReadSnapshot();
+      if (!latest.bytes) throw err;
+      db = openShop(sql, latest.bytes);
+      loadedGeneration = latest.generation;
+      stale = false;
+    }
+  }
+  watchReady = true;
 }
 
 export function getDb(): Database {
@@ -93,12 +240,20 @@ export function getDb(): Database {
 }
 
 export function persistDb(): Promise<void> {
-  persistTail = persistTail
-    .then(() => idbPut(getDb().export()))
-    .catch((err) => {
-      console.error(err);
-    });
-  return persistTail;
+  const run = persistTail.then(async () => {
+    if (stale) throw new ShopChangedError();
+    const bytes = getDb().export();
+    try {
+      publishGeneration(await idbCompareAndPut(bytes, loadedGeneration));
+    } catch (err) {
+      if (isShopChangedError(err)) markStale();
+      throw err;
+    }
+  });
+  persistTail = run.catch((err) => {
+    console.error(err);
+  });
+  return run;
 }
 
 function localDateStamp(): string {
@@ -133,37 +288,44 @@ export function formatLastBackupAt(iso: string | null): string {
   return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-function idbPutBackup(bytes: Uint8Array, at: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    void openIdb()
-      .then((idb) => {
+function idbPutBackupIfCurrent(bytes: Uint8Array, at: string, expected: number): Promise<boolean> {
+  return openIdb().then(
+    (idb) =>
+      new Promise((resolve, reject) => {
         const tx = idb.transaction(IDB_STORE, "readwrite");
+        const { finish, fail } = settleTransaction<boolean>(idb, tx, resolve, reject);
         const store = tx.objectStore(IDB_STORE);
-        store.put(bytes, IDB_BACKUP_KEY);
-        store.put(at, IDB_BACKUP_AT_KEY);
-        tx.oncomplete = () => {
-          idb.close();
-          resolve();
+        let current = false;
+        const genReq = store.get(IDB_GEN_KEY);
+        genReq.onsuccess = () => {
+          current = readGeneration(genReq.result) === expected;
+          if (!current) return;
+          store.put(bytes, IDB_BACKUP_KEY);
+          store.put(at, IDB_BACKUP_AT_KEY);
         };
-        tx.onerror = () => reject(tx.error ?? new Error("Could not save automatic backup"));
-      })
-      .catch(reject);
-  });
+        genReq.onerror = () => fail(genReq.error ?? new Error("Could not read the shop file"));
+        tx.oncomplete = () => finish(current);
+      }),
+  );
 }
 
 /** Copy the live SQLite file into a second IndexedDB key. Does not download a file. */
 export function refreshAutoBackup(): Promise<void> {
-  persistTail = persistTail
-    .then(() => {
-      const bytes = getDb().export();
-      const at = new Date().toISOString();
-      writeBackupAt(at);
-      return idbPutBackup(bytes, at);
-    })
-    .catch((err) => {
-      console.error(err);
-    });
-  return persistTail;
+  const run = persistTail.then(async () => {
+    if (stale) return;
+    const bytes = getDb().export();
+    const at = new Date().toISOString();
+    const wrote = await idbPutBackupIfCurrent(bytes, at, loadedGeneration);
+    if (!wrote) {
+      markStale();
+      return;
+    }
+    writeBackupAt(at);
+  });
+  persistTail = run.catch((err) => {
+    console.error(err);
+  });
+  return run;
 }
 
 /** Download the live database (not a stale auto-copy), then refresh Last backup. */
@@ -217,7 +379,8 @@ export async function replaceDb(bytes: Uint8Array): Promise<void> {
   migrateSalesRoundOff(next);
   db?.close();
   db = next;
-  await persistDb();
+  stale = false;
+  publishGeneration(await idbForcePut(db.export()));
   await refreshAutoBackup();
 }
 
