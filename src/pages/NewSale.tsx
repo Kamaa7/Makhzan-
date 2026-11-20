@@ -64,6 +64,9 @@ export function NewSale() {
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [saleDate, setSaleDate] = useState(todayISO());
   const [notes, setNotes] = useState("");
+  const [patientName, setPatientName] = useState("");
+  const [doctorName, setDoctorName] = useState("");
+  const [prescriptionNote, setPrescriptionNote] = useState("");
   const [cashReceivedRaw, setCashReceivedRaw] = useState("");
   const [search, setSearch] = useState("");
   const [gate, setGate] = useState<CounterGate>({ kind: "edit" });
@@ -101,6 +104,9 @@ export function NewSale() {
       setMethod(draft.method);
       if (draft.saleDate) setSaleDate(draft.saleDate);
       setNotes(draft.notes);
+      setPatientName(draft.patientName);
+      setDoctorName(draft.doctorName);
+      setPrescriptionNote(draft.prescriptionNote);
       setCashReceivedRaw(draft.cashReceivedRaw);
       setRestoredDraft(true);
     }
@@ -279,6 +285,9 @@ export function NewSale() {
         payment_method: method,
         sale_date: saleDate,
         notes,
+        patient_name: patientName,
+        doctor_name: doctorName,
+        prescription_note: prescriptionNote,
       });
       if (userId) {
         clearSaleDraft(userId);
@@ -300,6 +309,9 @@ export function NewSale() {
     setDiscountRaw("");
     setPaidRaw("");
     setNotes("");
+    setPatientName("");
+    setDoctorName("");
+    setPrescriptionNote("");
     setWalkInName("");
     setWalkInPhone("");
     setCustomerId("");
@@ -320,6 +332,9 @@ export function NewSale() {
     saleDate,
     notes,
     cashReceivedRaw,
+    patientName,
+    doctorName,
+    prescriptionNote,
   });
 
   const applyDraft = (draft: SaleDraft) => {
@@ -333,6 +348,9 @@ export function NewSale() {
     setMethod(draft.method);
     if (draft.saleDate) setSaleDate(draft.saleDate);
     setNotes(draft.notes);
+    setPatientName(draft.patientName);
+    setDoctorName(draft.doctorName);
+    setPrescriptionNote(draft.prescriptionNote);
     setCashReceivedRaw(draft.cashReceivedRaw);
   };
 
@@ -375,7 +393,17 @@ export function NewSale() {
 
   const dirty =
     lines.length > 0 ||
-    Boolean(discountRaw.trim() || paidRaw.trim() || notes.trim() || walkInName.trim() || walkInPhone.trim() || customerId);
+    Boolean(
+      discountRaw.trim() ||
+        paidRaw.trim() ||
+        notes.trim() ||
+        walkInName.trim() ||
+        walkInPhone.trim() ||
+        customerId ||
+        patientName.trim() ||
+        doctorName.trim() ||
+        prescriptionNote.trim(),
+    );
 
   useEffect(() => {
     if (!userId || !draftReady) return;
@@ -398,6 +426,9 @@ export function NewSale() {
     saleDate,
     notes,
     cashReceivedRaw,
+    patientName,
+    doctorName,
+    prescriptionNote,
   ]);
 
   const requestClear = () => {
@@ -776,6 +807,12 @@ export function NewSale() {
             </div>
           )}
           <textarea className="input-field min-h-[64px]" placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <div className="space-y-2 border-t border-gray-100 pt-3">
+            <p className="text-xs text-slate-500">Prescription. Leave blank for a normal sale. Expired stock cannot be sold.</p>
+            <input className="input-field" placeholder="Patient" value={patientName} onChange={(e) => setPatientName(e.target.value)} />
+            <input className="input-field" placeholder="Doctor" value={doctorName} onChange={(e) => setDoctorName(e.target.value)} />
+            <input className="input-field" placeholder="Prescription note" value={prescriptionNote} onChange={(e) => setPrescriptionNote(e.target.value)} />
+          </div>
           <dl className="space-y-2 border-t border-gray-100 pt-3 text-sm">
             <Row k={<Bi k="subtotal" />} v={formatMoney(totals.subtotal, currency)} />
             <Row k={<Bi k="discount" />} v={formatMoney(discount, currency)} />

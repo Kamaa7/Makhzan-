@@ -12,6 +12,7 @@ import type {
   StoreProfile,
 } from "../lib/types";
 import { requireUserId } from "./auth";
+import { addBatchQty } from "./batches";
 import { allRows, newId, nowIso, oneRow, persistDb, runSql } from "./engine";
 import { mapCustomer, mapMovement, mapPayment, mapProduct, mapProfile, mapSale, mapSaleItem } from "./mappers";
 
@@ -106,7 +107,9 @@ export type ProductWrite = {
   is_active: boolean;
 };
 
-export async function insertProduct(input: ProductWrite & { opening_qty?: number }): Promise<string> {
+export async function insertProduct(
+  input: ProductWrite & { opening_qty?: number; batch_no?: string; expiry_date?: string },
+): Promise<string> {
   const uid = requireUserId();
   const sku = input.sku.trim();
   if (sku) {
@@ -145,6 +148,14 @@ export async function insertProduct(input: ProductWrite & { opening_qty?: number
       ) VALUES (?, ?, ?, ?, ?, 'opening', 'Opening stock', NULL, ?)`,
       [newId(), uid, id, opening, opening, stamp],
     );
+    addBatchQty({
+      userId: uid,
+      productId: id,
+      batchNo: input.batch_no ?? "",
+      expiry: input.expiry_date ?? "",
+      qty: opening,
+      stamp,
+    });
   }
   await persistDb();
   return id;

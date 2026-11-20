@@ -94,6 +94,9 @@ CREATE TABLE IF NOT EXISTS sales (
   payment_method TEXT NOT NULL DEFAULT 'cash'
     CHECK (payment_method IN ('cash', 'upi', 'card', 'bank', 'cheque', 'other')),
   status TEXT NOT NULL DEFAULT 'unpaid' CHECK (status IN ('paid', 'unpaid', 'partial')),
+  patient_name TEXT NOT NULL DEFAULT '',
+  doctor_name TEXT NOT NULL DEFAULT '',
+  prescription_note TEXT NOT NULL DEFAULT '',
   notes TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
@@ -116,7 +119,9 @@ CREATE TABLE IF NOT EXISTS sale_items (
   qty REAL NOT NULL CHECK (qty > 0),
   unit_price INTEGER NOT NULL CHECK (unit_price >= 0),
   tax_rate REAL NOT NULL DEFAULT 0 CHECK (tax_rate >= 0 AND tax_rate <= 100),
-  line_amount INTEGER NOT NULL CHECK (line_amount >= 0)
+  line_amount INTEGER NOT NULL CHECK (line_amount >= 0),
+  batch_no TEXT NOT NULL DEFAULT '',
+  expiry_date TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS sale_items_sale_idx ON sale_items (sale_id, position);
@@ -144,3 +149,15 @@ CREATE TABLE IF NOT EXISTS stock_movements (
 );
 
 CREATE INDEX IF NOT EXISTS stock_movements_product_idx ON stock_movements (product_id, created_at);
+
+CREATE TABLE IF NOT EXISTS stock_batches (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  batch_no TEXT NOT NULL DEFAULT '',
+  expiry_date TEXT NOT NULL DEFAULT '',
+  qty REAL NOT NULL DEFAULT 0 CHECK (qty >= 0),
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS stock_batches_product_idx ON stock_batches (product_id, expiry_date);

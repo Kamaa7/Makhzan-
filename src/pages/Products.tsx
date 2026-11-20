@@ -13,7 +13,8 @@ import { useToast } from "../context/ToastContext";
 import { stockChange, type StockIntent } from "../lib/saleState";
 import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
 import { UNITS } from "../lib/constants";
-import { formatQty } from "../lib/format";
+import { addDaysISO, NEAR_EXPIRY_DAYS } from "../lib/batch";
+import { formatDate, formatQty, todayISO } from "../lib/format";
 import { asPaise, formatMoney, lineAmount, parseMajorInput, paiseToRupeesNumber } from "../lib/money";
 import {
   adjustStock,
@@ -21,20 +22,24 @@ import {
   getProduct,
   insertProduct,
   listProducts,
+  listOpenBatches,
+  listProductBatches,
   listStockMovements,
   updateProduct,
 } from "../db";
 import type { Product, StockMovement } from "../lib/types";
+import type { StockBatch } from "../db/batches";
 
 type Filter = "active" | "low" | "inactive" | "all";
 
 export function Products() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const currency = profile?.currency || "INR";
   const [products, setProducts] = useState<Product[]>([]);
+  const [batches, setBatches] = useState<StockBatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("active");
   const [q, setQ] = useState("");
@@ -46,7 +51,8 @@ export function Products() {
 
   const load = useCallback(async () => {
     setProducts(listProducts());
-  }, []);
+    setBatches(user?.id ? listOpenBatches(user.id) : []);
+  }, [user?.id]);
 
   useEffect(() => {
     load()
@@ -135,7 +141,7 @@ export function Products() {
     <div className="space-y-6">
       <PageHeader
         title="Products & Stock"
-        subtitle="SKU is the barcode. Scan to find or open stock."
+        subtitle="SKU is the barcode. For a medicine, record the batch and expiry when the stock comes in."
         actions={
           <button type="button" className="btn-primary" onClick={openAddProduct}>
             Add product
@@ -209,6 +215,7 @@ export function Products() {
                     <span className={Number(p.stock_qty) <= Number(p.low_stock_alert) ? "text-red-700" : ""}>
                       {formatQty(Number(p.stock_qty))}
                     </span>
+                    <ExpiryHint productId={p.id} batches={batches} />
                   </td>
                   <td className="px-3 py-2">{p.is_active ? "Active" : "Inactive"}</td>
                   <td className="px-3 py-2 text-right">
@@ -299,6 +306,8 @@ function ProductEditor({
     tax: initial ? String(initial.tax_rate) : "0",
     alert: initial ? String(initial.low_stock_alert) : "5",
     opening: "",
+    batch: "",
+    expiry: "",
     is_active: initial?.is_active ?? true,
   });
 
@@ -337,6 +346,8 @@ function ProductEditor({
         await insertProduct({
           ...payload,
           opening_qty: Number.isFinite(opening) ? opening : 0,
+          batch_no: form.batch,
+          expiry_date: form.expiry,
         });
       }
       push("Product saved", "success");
@@ -434,13 +445,21 @@ function ProductEditor({
           </div>
         </div>
         {!initial && (
-          <div>
-            <label className="label">Opening stock (optional)</label>
-            <input
-              className="input-field"
-              value={form.opening}
-              onChange={(e) => setForm({ ...form, opening: e.target.value })}
-            />
+          <div className="space-y-3">
+            <div>
+              <label className="label">Opening stock (optional)</label>
+              <input className="input-field" value={form.opening} onChange={(e) => setForm({ ...form, opening: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Batch</label>
+                <input className="input-field" placeholder="Optional" value={form.batch} onChange={(e) => setForm({ ...form, batch: e.target.value })} />
+              </div>
+              <div>
+                <label className="label">Expiry</label>
+                <input className="input-field" type="date" value={form.expiry} onChange={(e) => setForm({ ...form, expiry: e.target.value })} />
+              </div>
+            </div>
           </div>
         )}
         <label className="flex items-center gap-2 text-sm">
@@ -500,12 +519,17 @@ function StockModal({
   const [intent, setIntent] = useState<StockIntent>("purchase");
   const [qty, setQty] = useState("");
   const [note, setNote] = useState("");
+  const [batchNo, setBatchNo] = useState("");
+  const [expiry, setExpiry] = useState("");
+  const [batchId, setBatchId] = useState("");
+  const [lots, setLots] = useState<StockBatch[]>([]);
   const [history, setHistory] = useState<StockMovement[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     try {
       setHistory(listStockMovements(product.id, 100));
+      setLots(listProductBatches(product.id, product.user_id));
     } catch (err) {
       push(err instanceof Error ? err.message : "Could not load history", "error");
     }
@@ -526,10 +550,16 @@ function StockModal({
         change_qty: change,
         reason,
         note,
+        batch_no: intent === "remove" ? "" : batchNo,
+        expiry_date: intent === "remove" ? "" : expiry,
+        batch_id: intent === "remove" ? batchId : "",
       });
       push("Stock updated", "success");
       setQty("");
       setNote("");
+      setBatchNo("");
+      setExpiry("");
+      setBatchId("");
       await onChanged();
     } catch (err) {
       push(err instanceof Error ? err.message : "Stock update failed", "error");
@@ -575,6 +605,21 @@ function StockModal({
           <p className="self-center text-sm text-slate-500">Recorded as an adjustment.</p>
         )}
         <input className="input-field" placeholder="Quantity" value={qty} onChange={(e) => setQty(e.target.value)} />
+        {intent === "remove" ? (
+          <select className="input-field" value={batchId} onChange={(e) => setBatchId(e.target.value)}>
+            <option value="">Soonest expiry first</option>
+            {lots.map((lot) => (
+              <option key={lot.id} value={lot.id}>
+                {(lot.batch_no || "No batch") + (lot.expiry_date ? ` · ${formatDate(lot.expiry_date)}` : "")} · {formatQty(lot.qty)}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <>
+            <input className="input-field" placeholder="Batch" value={batchNo} onChange={(e) => setBatchNo(e.target.value)} />
+            <input className="input-field" type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} />
+          </>
+        )}
         <input className="input-field" placeholder="Note" value={note} onChange={(e) => setNote(e.target.value)} />
         <button className="btn-primary sm:col-span-2" type="submit" disabled={busy}>
           Apply stock change
@@ -610,5 +655,24 @@ function StockModal({
         )}
       </div>
     </Modal>
+  );
+}
+
+function ExpiryHint({ productId, batches }: { productId: string; batches: StockBatch[] }) {
+  const today = todayISO();
+  const soonUntil = addDaysISO(today, NEAR_EXPIRY_DAYS);
+  const dates = batches
+    .filter((lot) => lot.product_id === productId && lot.expiry_date)
+    .map((lot) => lot.expiry_date)
+    .sort();
+  if (!dates.length) return null;
+  const date = dates[0];
+  const expired = date < today;
+  const soon = !expired && date <= soonUntil;
+  return (
+    <p className={`text-xs ${expired || soon ? "text-red-700" : "text-slate-500"}`}>
+      {expired ? "Expired " : "Exp "}
+      {formatDate(date)}
+    </p>
   );
 }

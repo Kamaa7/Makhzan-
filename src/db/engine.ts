@@ -201,14 +201,52 @@ async function getSql(): Promise<SqlJsStatic> {
   return SQL;
 }
 
+function columnNames(database: Database, table: string): string[] {
+  const info = database.exec(`PRAGMA table_info(${table})`);
+  return (info[0]?.values ?? []).map((row) => String(row[1]));
+}
+
 function migrateSalesRoundOff(database: Database): boolean {
-  const info = database.exec("PRAGMA table_info(sales)");
-  const names = (info[0]?.values ?? []).map((row) => String(row[1]));
+  const names = columnNames(database, "sales");
   if (!names.includes("round_off")) {
     database.run("ALTER TABLE sales ADD COLUMN round_off INTEGER NOT NULL DEFAULT 0");
     return true;
   }
   return false;
+}
+
+function migratePharmacy(database: Database): boolean {
+  let changed = false;
+  const sales = columnNames(database, "sales");
+  if (!sales.includes("patient_name")) {
+    database.run("ALTER TABLE sales ADD COLUMN patient_name TEXT NOT NULL DEFAULT ''");
+    database.run("ALTER TABLE sales ADD COLUMN doctor_name TEXT NOT NULL DEFAULT ''");
+    database.run("ALTER TABLE sales ADD COLUMN prescription_note TEXT NOT NULL DEFAULT ''");
+    changed = true;
+  }
+  const items = columnNames(database, "sale_items");
+  if (!items.includes("batch_no")) {
+    database.run("ALTER TABLE sale_items ADD COLUMN batch_no TEXT NOT NULL DEFAULT ''");
+    database.run("ALTER TABLE sale_items ADD COLUMN expiry_date TEXT NOT NULL DEFAULT ''");
+    changed = true;
+  }
+  const pending = database.exec(
+    `SELECT p.id, p.user_id, p.stock_qty
+     FROM products p
+     WHERE p.stock_qty > 0
+       AND NOT EXISTS (SELECT 1 FROM stock_batches b WHERE b.product_id = p.id)`,
+  );
+  const rows = pending[0]?.values ?? [];
+  const stamp = new Date().toISOString();
+  for (const row of rows) {
+    database.run(
+      `INSERT INTO stock_batches (id, user_id, product_id, batch_no, expiry_date, qty, created_at)
+       VALUES (?, ?, ?, '', '', ?, ?)`,
+      [crypto.randomUUID(), String(row[1]), String(row[0]), Number(row[2]), stamp],
+    );
+    changed = true;
+  }
+  return changed;
 }
 
 function openShop(sql: SqlJsStatic, bytes: Uint8Array | null): Database {
@@ -225,8 +263,9 @@ export async function initDb(): Promise<void> {
   db = openShop(sql, saved.bytes);
   loadedGeneration = saved.generation;
   db.exec(schemaSql);
-  const migrated = migrateSalesRoundOff(db);
-  if (!saved.bytes || migrated) {
+  const roundOffMigrated = migrateSalesRoundOff(db);
+  const pharmacyMigrated = migratePharmacy(db);
+  if (!saved.bytes || roundOffMigrated || pharmacyMigrated) {
     try {
       publishGeneration(await compareAndPut(db.export(), loadedGeneration));
     } catch (err) {
@@ -386,6 +425,7 @@ export async function replaceDb(bytes: Uint8Array): Promise<void> {
   }
   next.exec(schemaSql);
   migrateSalesRoundOff(next);
+  migratePharmacy(next);
   db?.close();
   db = next;
   stale = false;

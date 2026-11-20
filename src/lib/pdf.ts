@@ -1,6 +1,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { amountInWords } from "./amountInWords";
+import { itemBillText } from "./batch";
 import { formatDate, formatQty } from "./format";
 import { asPaise, formatMoney } from "./money";
 import type { Sale, SaleItem, StoreProfile } from "./types";
@@ -83,6 +84,9 @@ export function buildSalePdf(sale: Sale, items: SaleItem[], profile: StoreProfil
     sale.customer_email,
     sale.customer_address,
     sale.customer_gstin && `GSTIN: ${sale.customer_gstin}`,
+    sale.patient_name && `Patient: ${sale.patient_name}`,
+    sale.doctor_name && `Doctor: ${sale.doctor_name}`,
+    sale.prescription_note && `Prescription: ${sale.prescription_note}`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -95,7 +99,7 @@ export function buildSalePdf(sale: Sale, items: SaleItem[], profile: StoreProfil
     head: [["#", "Item", "Qty", "Unit", "Rate", "Tax %", "Amount"]],
     body: items.map((item, i) => [
       String(i + 1),
-      item.description,
+      itemBillText(item),
       formatQty(Number(item.qty)),
       item.unit,
       formatMoney(asPaise(item.unit_price), currency),
@@ -202,7 +206,7 @@ export function buildReceiptPdf(sale: Sale, items: SaleItem[], profile: StorePro
 
   doc.setFontSize(8);
   for (const item of items) {
-    const name = doc.splitTextToSize(item.description, 48);
+    const name = doc.splitTextToSize(itemBillText(item), 48);
     doc.text(name, 4, y);
     doc.text(formatQty(Number(item.qty)), 52, y, { align: "right" });
     doc.text(formatMoney(asPaise(item.line_amount), currency), width - 4, y, { align: "right" });

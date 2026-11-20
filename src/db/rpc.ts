@@ -1,7 +1,10 @@
 import { asPaise, computeSaleTotals } from "../lib/money";
+import { captionForTakes, planTake, qty3 } from "../lib/batch";
+import { todayISO } from "../lib/format";
 import { commitSalePayment, nextPaymentStatus } from "../lib/saleState";
 import type { DocType, PaymentMethod } from "../lib/types";
 import { requireUserId } from "./auth";
+import { addBatchQty, lotsCovering, takeBatchQty } from "./batches";
 import { getDb, newId, nowIso, oneRow, persistDb, refreshAutoBackup, runSql } from "./engine";
 import { mapProduct } from "./mappers";
 
@@ -15,10 +18,6 @@ export type SaleLineInput = {
   unit_price: number;
   tax_rate: number;
 };
-
-function qty3(n: number): number {
-  return Math.round(n * 1000) / 1000;
-}
 
 export async function createSale(input: {
   doc_type: DocType;
@@ -34,6 +33,9 @@ export async function createSale(input: {
   payment_method: PaymentMethod;
   sale_date: string;
   notes?: string;
+  patient_name?: string;
+  doctor_name?: string;
+  prescription_note?: string;
 }): Promise<string> {
   const uid = requireUserId();
   if (input.doc_type !== "cash_memo" && input.doc_type !== "bill") {
@@ -119,8 +121,9 @@ export async function createSale(input: {
       `INSERT INTO sales (
         id, user_id, doc_type, doc_number, sale_date, customer_id,
         customer_name, customer_phone, customer_email, customer_address, customer_gstin,
-        subtotal, discount, tax_total, round_off, grand_total, amount_paid, payment_method, status, notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        subtotal, discount, tax_total, round_off, grand_total, amount_paid, payment_method, status,
+        patient_name, doctor_name, prescription_note, notes, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         saleId,
         uid,
@@ -141,6 +144,9 @@ export async function createSale(input: {
         Number(paid),
         input.payment_method,
         status,
+        (input.patient_name ?? "").trim().slice(0, 80),
+        (input.doctor_name ?? "").trim().slice(0, 80),
+        (input.prescription_note ?? "").trim().slice(0, 240),
         input.notes ?? "",
         stamp,
         stamp,
@@ -151,10 +157,44 @@ export async function createSale(input: {
       const lineAmt = Number(
         computeSaleTotals([{ qty: item.qty, unitPrice: asPaise(item.unit_price), taxRate: item.tax_rate }], 0n).subtotal,
       );
+      let batchNo = "";
+      let expiryDate = "";
+      if (item.product_id) {
+        const current = oneRow("SELECT stock_qty, name FROM products WHERE id = ? AND user_id = ?", [item.product_id, uid]);
+        if (!current) throw new Error("Product not found");
+        const stockQty = Number(current.stock_qty);
+        const lots = lotsCovering(item.product_id, uid, stockQty);
+        let takes;
+        try {
+          takes = planTake(lots, item.qty, input.sale_date, "sale");
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Insufficient stock";
+          throw new Error(`${String(current.name)}: ${message}`);
+        }
+        for (const take of takes) takeBatchQty(uid, take.id, take.take);
+        const caption = captionForTakes(lots, takes);
+        batchNo = caption.batch_no;
+        expiryDate = caption.expiry_date;
+        const next = qty3(stockQty - item.qty);
+        if (next < 0) throw new Error("Insufficient stock");
+        runSql("UPDATE products SET stock_qty = ?, updated_at = ? WHERE id = ? AND user_id = ?", [
+          next,
+          stamp,
+          item.product_id,
+          uid,
+        ]);
+        const movementNote = batchNo ? `${docNumber} · ${batchNo}` : docNumber;
+        runSql(
+          `INSERT INTO stock_movements (
+            id, user_id, product_id, change_qty, balance_after, reason, note, sale_id, created_at
+          ) VALUES (?, ?, ?, ?, ?, 'sale', ?, ?, ?)`,
+          [newId(), uid, item.product_id, -item.qty, next, movementNote, saleId, stamp],
+        );
+      }
       runSql(
         `INSERT INTO sale_items (
-          id, user_id, sale_id, product_id, position, description, unit, qty, unit_price, tax_rate, line_amount
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id, user_id, sale_id, product_id, position, description, unit, qty, unit_price, tax_rate, line_amount, batch_no, expiry_date
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           newId(),
           uid,
@@ -167,26 +207,10 @@ export async function createSale(input: {
           item.unit_price,
           item.tax_rate,
           lineAmt,
+          batchNo,
+          expiryDate,
         ],
       );
-      if (item.product_id) {
-        const current = oneRow("SELECT stock_qty FROM products WHERE id = ? AND user_id = ?", [item.product_id, uid]);
-        if (!current) throw new Error("Product not found");
-        const next = qty3(Number(current.stock_qty) - item.qty);
-        if (next < 0) throw new Error("Insufficient stock");
-        runSql("UPDATE products SET stock_qty = ?, updated_at = ? WHERE id = ? AND user_id = ?", [
-          next,
-          stamp,
-          item.product_id,
-          uid,
-        ]);
-        runSql(
-          `INSERT INTO stock_movements (
-            id, user_id, product_id, change_qty, balance_after, reason, note, sale_id, created_at
-          ) VALUES (?, ?, ?, ?, ?, 'sale', ?, ?, ?)`,
-          [newId(), uid, item.product_id, -item.qty, next, docNumber, saleId, stamp],
-        );
-      }
     });
 
     if (paid > 0n) {
@@ -244,6 +268,9 @@ export async function adjustStock(input: {
   change_qty: number;
   reason: "adjustment" | "purchase" | "return";
   note?: string;
+  batch_no?: string;
+  expiry_date?: string;
+  batch_id?: string;
 }): Promise<string> {
   const uid = requireUserId();
   if (!["adjustment", "purchase", "return"].includes(input.reason)) {
@@ -260,18 +287,45 @@ export async function adjustStock(input: {
   if (next < 0) throw new Error("Stock cannot go below zero");
   const id = newId();
   const stamp = nowIso();
-  runSql("UPDATE products SET stock_qty = ?, updated_at = ? WHERE id = ? AND user_id = ?", [
-    next,
-    stamp,
-    input.product_id,
-    uid,
-  ]);
-  runSql(
-    `INSERT INTO stock_movements (
-      id, user_id, product_id, change_qty, balance_after, reason, note, sale_id, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
-    [id, uid, input.product_id, change, next, input.reason, input.note ?? "", stamp],
-  );
+  const batchNo = (input.batch_no ?? "").trim();
+  const expiry = (input.expiry_date ?? "").trim();
+  const database = getDb();
+  database.run("BEGIN");
+  try {
+    if (change > 0) {
+      addBatchQty({
+        userId: uid,
+        productId: input.product_id,
+        batchNo,
+        expiry,
+        qty: change,
+        stamp,
+      });
+    } else if (input.batch_id) {
+      takeBatchQty(uid, input.batch_id, Math.abs(change));
+    } else {
+      const lots = lotsCovering(input.product_id, uid, Number(row.stock_qty));
+      const takes = planTake(lots, Math.abs(change), todayISO(), "discard");
+      for (const take of takes) takeBatchQty(uid, take.id, take.take);
+    }
+    const batchNote = [input.note ?? "", batchNo, expiry].filter(Boolean).join(" · ");
+    runSql("UPDATE products SET stock_qty = ?, updated_at = ? WHERE id = ? AND user_id = ?", [
+      next,
+      stamp,
+      input.product_id,
+      uid,
+    ]);
+    runSql(
+      `INSERT INTO stock_movements (
+        id, user_id, product_id, change_qty, balance_after, reason, note, sale_id, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+      [id, uid, input.product_id, change, next, input.reason, batchNote, stamp],
+    );
+    database.run("COMMIT");
+  } catch (err) {
+    database.run("ROLLBACK");
+    throw err;
+  }
   await persistDb();
   await refreshAutoBackup();
   return id;

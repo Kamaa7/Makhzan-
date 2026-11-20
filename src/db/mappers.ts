@@ -65,6 +65,9 @@ export function mapSale(row: Record<string, unknown>): Sale {
     payment_method: row.payment_method as Sale["payment_method"],
     status: row.status as Sale["status"],
     notes: String(row.notes ?? ""),
+    patient_name: String(row.patient_name ?? ""),
+    doctor_name: String(row.doctor_name ?? ""),
+    prescription_note: String(row.prescription_note ?? ""),
     created_at: String(row.created_at),
   };
 }
@@ -81,6 +84,8 @@ export function mapSaleItem(row: Record<string, unknown>): SaleItem {
     unit_price: Number(row.unit_price),
     tax_rate: Number(row.tax_rate),
     line_amount: Number(row.line_amount),
+    batch_no: String(row.batch_no ?? ""),
+    expiry_date: String(row.expiry_date ?? ""),
   };
 }
 

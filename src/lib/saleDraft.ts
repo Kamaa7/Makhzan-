@@ -15,6 +15,9 @@ export type SaleDraft = {
   saleDate: string;
   notes: string;
   cashReceivedRaw: string;
+  patientName: string;
+  doctorName: string;
+  prescriptionNote: string;
 };
 
 function draftKey(userId: string): string {
@@ -64,7 +67,10 @@ export function saleDraftIsMeaningful(draft: SaleDraft): boolean {
         draft.notes.trim() ||
         draft.walkInName.trim() ||
         draft.walkInPhone.trim() ||
-        draft.customerId,
+        draft.customerId ||
+        draft.patientName.trim() ||
+        draft.doctorName.trim() ||
+        draft.prescriptionNote.trim(),
     )
   );
 }
@@ -96,6 +102,9 @@ export function parseSaleDraft(raw: string): SaleDraft | null {
       saleDate: String(data.saleDate ?? ""),
       notes: String(data.notes ?? ""),
       cashReceivedRaw: String(data.cashReceivedRaw ?? ""),
+      patientName: String(data.patientName ?? ""),
+      doctorName: String(data.doctorName ?? ""),
+      prescriptionNote: String(data.prescriptionNote ?? ""),
     };
     return saleDraftIsMeaningful(draft) ? draft : null;
   } catch {

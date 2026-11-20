@@ -8,6 +8,7 @@ import { isCtrlKey, isDialogOpen, isFKey } from "../lib/shortcuts";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { PAYMENT_METHODS } from "../lib/constants";
+import { batchCaption } from "../lib/batch";
 import { docTypeLabel, formatDate, formatQty } from "../lib/format";
 import { amountInWords } from "../lib/amountInWords";
 import { asPaise, formatMoney, parseMajorInput } from "../lib/money";
@@ -150,6 +151,9 @@ export function SaleDetail() {
           <p>{sale.customer_phone}</p>
           <p>{sale.customer_address}</p>
           {sale.customer_gstin && <p>GSTIN: {sale.customer_gstin}</p>}
+          {sale.patient_name.trim() ? <p>Patient: {sale.patient_name}</p> : null}
+          {sale.doctor_name.trim() ? <p>Doctor: {sale.doctor_name}</p> : null}
+          {sale.prescription_note.trim() ? <p>Prescription: {sale.prescription_note}</p> : null}
         </div>
         <div className="card space-y-1 p-4 text-sm">
           <Row k="Subtotal" v={formatMoney(asPaise(sale.subtotal), currency)} />
@@ -180,7 +184,12 @@ export function SaleDetail() {
           <tbody>
             {items.map((item) => (
               <tr key={item.id} className="border-t border-gray-100">
-                <td className="px-3 py-2">{item.description}</td>
+                <td className="px-3 py-2">
+                  {item.description}
+                  {batchCaption(item.batch_no, item.expiry_date) ? (
+                    <span className="block text-xs text-slate-500">{batchCaption(item.batch_no, item.expiry_date)}</span>
+                  ) : null}
+                </td>
                 <td className="px-3 py-2 text-right">{formatQty(Number(item.qty))}</td>
                 <td className="px-3 py-2">{item.unit}</td>
                 <td className="px-3 py-2 text-right">{formatMoney(asPaise(item.unit_price), currency)}</td>

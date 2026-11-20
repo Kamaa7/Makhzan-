@@ -36,6 +36,9 @@ const draft = {
   saleDate: "2026-10-28",
   notes: "hold",
   cashReceivedRaw: "20.00",
+  patientName: "Asha",
+  doctorName: "Dr Rao",
+  prescriptionNote: "twice daily",
 };
 
 const roundTrip = parseSaleDraft(serializeSaleDraft(draft));
@@ -51,6 +54,9 @@ assert.equal(roundTrip.lines[1].unitPrice, 250n);
 assert.equal(roundTrip.paidRaw, "10.50");
 assert.equal(roundTrip.method, "upi");
 assert.equal(roundTrip.cashReceivedRaw, "20.00");
+assert.equal(roundTrip.patientName, "Asha");
+assert.equal(roundTrip.doctorName, "Dr Rao");
+assert.equal(roundTrip.prescriptionNote, "twice daily");
 assert.ok(saleDraftIsMeaningful(roundTrip));
 assert.equal(parseSaleDraft("{}"), null);
 assert.equal(parseSaleDraft('{"docType":"cash_memo","method":"cash","lines":[]}'), null);
@@ -60,5 +66,8 @@ const messy = parseSaleDraft(
 );
 assert.ok(messy);
 assert.equal(messy.lines[0].unitPrice, 0n);
+assert.equal(messy.patientName, "");
+assert.equal(messy.doctorName, "");
+assert.equal(messy.prescriptionNote, "");
 
 console.log("draft asserts ok");

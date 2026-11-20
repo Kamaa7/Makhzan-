@@ -71,6 +71,9 @@ export type Sale = {
   payment_method: PaymentMethod;
   status: SaleStatus;
   notes: string;
+  patient_name: string;
+  doctor_name: string;
+  prescription_note: string;
   created_at: string;
 };
 
@@ -85,6 +88,8 @@ export type SaleItem = {
   unit_price: number;
   tax_rate: number;
   line_amount: number;
+  batch_no: string;
+  expiry_date: string;
 };
 
 export type SalePayment = {

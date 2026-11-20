@@ -5,6 +5,7 @@ import { SettingsButton } from "../components/SettingsMenu";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { amountInWords } from "../lib/amountInWords";
+import { batchCaption } from "../lib/batch";
 import { formatDate, formatQty } from "../lib/format";
 import { asPaise, formatMoney } from "../lib/money";
 import { downloadReceiptPdf, downloadSalePdf, memoTitle } from "../lib/pdf";
@@ -116,6 +117,7 @@ function A4Body({ sale, items, profile }: { sale: Sale; items: SaleItem[]; profi
           <p>{sale.customer_phone}</p>
           <p className="whitespace-pre-line">{sale.customer_address}</p>
           {sale.customer_gstin && <p>GSTIN: {sale.customer_gstin}</p>}
+          <PrescriptionLines sale={sale} />
         </div>
         <div className="text-right">
           <p>
@@ -140,7 +142,10 @@ function A4Body({ sale, items, profile }: { sale: Sale; items: SaleItem[]; profi
           {items.map((item, i) => (
             <tr key={item.id} className="border-b border-gray-200">
               <td className="py-1.5">{i + 1}</td>
-              <td>{item.description}</td>
+              <td>
+                {item.description}
+                <BatchLine item={item} />
+              </td>
               <td className="text-right">{formatQty(Number(item.qty))}</td>
               <td>{item.unit}</td>
               <td className="text-right">{formatMoney(asPaise(item.unit_price), currency)}</td>
@@ -181,6 +186,7 @@ function ReceiptBody({ sale, items, profile }: { sale: Sale; items: SaleItem[]; 
       <p className="text-center">{sale.doc_number}</p>
       <p className="text-center">{formatDate(sale.sale_date)}</p>
       {(sale.customer_name ?? "").trim() ? <p className="text-center">{sale.customer_name}</p> : null}
+      <PrescriptionLines sale={sale} compact />
       <table className="mt-2 w-full">
         <thead>
           <tr className="border-y border-black text-left">
@@ -192,7 +198,10 @@ function ReceiptBody({ sale, items, profile }: { sale: Sale; items: SaleItem[]; 
         <tbody>
           {items.map((item) => (
             <tr key={item.id}>
-              <td className="py-0.5">{item.description}</td>
+              <td className="py-0.5">
+                {item.description}
+                <BatchLine item={item} />
+              </td>
               <td className="text-right">{formatQty(Number(item.qty))}</td>
               <td className="text-right">{formatMoney(asPaise(item.line_amount), currency)}</td>
             </tr>
@@ -211,6 +220,26 @@ function ReceiptBody({ sale, items, profile }: { sale: Sale; items: SaleItem[]; 
       <p className="mt-2 italic">{amountInWords(asPaise(sale.grand_total), currency)}</p>
       {profile.memo_footer ? <p className="mt-2">{profile.memo_footer}</p> : null}
     </article>
+  );
+}
+
+function BatchLine({ item }: { item: SaleItem }) {
+  const caption = batchCaption(item.batch_no, item.expiry_date);
+  if (!caption) return null;
+  return <span className="block text-xs text-slate-600">{caption}</span>;
+}
+
+function PrescriptionLines({ sale, compact = false }: { sale: Sale; compact?: boolean }) {
+  const patient = sale.patient_name.trim();
+  const doctor = sale.doctor_name.trim();
+  const note = sale.prescription_note.trim();
+  if (!patient && !doctor && !note) return null;
+  return (
+    <div className={compact ? "mt-1 text-center" : "mt-2"}>
+      {patient ? <p>Patient: {patient}</p> : null}
+      {doctor ? <p>Doctor: {doctor}</p> : null}
+      {note ? <p>Prescription: {note}</p> : null}
+    </div>
   );
 }
 

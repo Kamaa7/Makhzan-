@@ -6,7 +6,8 @@ import { ShortcutHint } from "../components/ShortcutsDialog";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useShortcuts } from "../hooks/useShortcuts";
-import { formatLastBackupAt, getDayCloseStats, getHomeStats, getSale, readLastBackupAt, saveKeeperBackup } from "../db";
+import { expiryCounts, formatLastBackupAt, getDayCloseStats, getHomeStats, getSale, readLastBackupAt, saveKeeperBackup } from "../db";
+import { addDaysISO, NEAR_EXPIRY_DAYS } from "../lib/batch";
 import { PAYMENT_METHODS } from "../lib/constants";
 import { markDayReviewed, readDayReviewed, type DayReviewed } from "../lib/dayReviewed";
 import { todayISO } from "../lib/format";
@@ -36,6 +37,8 @@ export function Home() {
   const [stillDue, setStillDue] = useState(0n);
   const [reviewed, setReviewed] = useState<DayReviewed | null>(null);
   const [readyUpdate, setReadyUpdate] = useState<ReadyUpdate | null>(null);
+  const [expiredBatches, setExpiredBatches] = useState(0);
+  const [soonBatches, setSoonBatches] = useState(0);
   const today = todayISO();
 
   useEffect(() => {
@@ -56,6 +59,9 @@ export function Home() {
       setStillDue(asPaise(close.stillDue));
       const stored = readDayReviewed(userId);
       setReviewed(stored?.date === today ? stored : null);
+      const watch = expiryCounts(userId, today, addDaysISO(today, NEAR_EXPIRY_DAYS));
+      setExpiredBatches(watch.expired);
+      setSoonBatches(watch.soon);
     } catch (err) {
       push(err instanceof Error ? err.message : "Could not load home", "error");
     } finally {
@@ -133,6 +139,19 @@ export function Home() {
           <Link to="/store" className="font-medium text-gray-900 underline underline-offset-4">
             Open Store Profile
           </Link>
+        </WarningBanner>
+      )}
+      {expiredBatches > 0 && (
+        <WarningBanner>
+          {expiredBatches} {expiredBatches === 1 ? "batch is" : "batches are"} past expiry and will not be sold.{" "}
+          <Link to="/products" className="font-medium text-gray-900 underline underline-offset-4">
+            Open stock
+          </Link>
+        </WarningBanner>
+      )}
+      {soonBatches > 0 && (
+        <WarningBanner>
+          {soonBatches} {soonBatches === 1 ? "batch expires" : "batches expire"} within {NEAR_EXPIRY_DAYS} days.
         </WarningBanner>
       )}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

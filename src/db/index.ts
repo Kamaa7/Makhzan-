@@ -38,5 +38,6 @@ export {
 } from "./repo";
 export type { CustomerPaymentRow } from "./repo";
 export { createSale, recordSalePayment, adjustStock } from "./rpc";
+export { expiryCounts, listOpenBatches, listProductBatches } from "./batches";
 export type { SaleLineInput } from "./rpc";
 export type { ProductWrite, CustomerWrite } from "./repo";
