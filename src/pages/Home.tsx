@@ -12,6 +12,7 @@ import { markDayReviewed, readDayReviewed, type DayReviewed } from "../lib/dayRe
 import { todayISO } from "../lib/format";
 import type { ArKey } from "../lib/i18n";
 import { getLastSaleId } from "../lib/lastSale";
+import { desktopReadyUpdate, isDesktop, openDesktopRelease, type ReadyUpdate } from "../lib/desktop";
 import { asPaise, formatMoney } from "../lib/money";
 import { isAltLetter, isDialogOpen } from "../lib/shortcuts";
 import type { PaymentMethod } from "../lib/types";
@@ -34,6 +35,7 @@ export function Home() {
   const [collectedByMethod, setCollectedByMethod] = useState<Record<PaymentMethod, bigint> | null>(null);
   const [stillDue, setStillDue] = useState(0n);
   const [reviewed, setReviewed] = useState<DayReviewed | null>(null);
+  const [readyUpdate, setReadyUpdate] = useState<ReadyUpdate | null>(null);
   const today = todayISO();
 
   useEffect(() => {
@@ -61,6 +63,17 @@ export function Home() {
     }
   }, [push, userId, today]);
 
+  useEffect(() => {
+    if (!isDesktop()) return;
+    let cancelled = false;
+    void desktopReadyUpdate().then((update) => {
+      if (!cancelled) setReadyUpdate(update);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const reprintLast = () => {
     if (isDialogOpen() || !lastSaleId) return;
     navigate(`/sales/${lastSaleId}/print`);
@@ -77,7 +90,8 @@ export function Home() {
   const saveBackup = async () => {
     setBackupBusy(true);
     try {
-      await saveKeeperBackup();
+      const saved = await saveKeeperBackup();
+      if (!saved) return;
       setBackupAt(readLastBackupAt());
       push("Backup file downloaded", "success");
     } catch (err) {
@@ -104,6 +118,15 @@ export function Home() {
           </div>
         }
       />
+      {readyUpdate && (
+        <button
+          type="button"
+          className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-left text-sm font-medium text-gray-900 shadow-sm hover:bg-gray-50"
+          onClick={() => void openDesktopRelease(readyUpdate.url)}
+        >
+          Version {readyUpdate.version} is ready.
+        </button>
+      )}
       {!profile?.business_name.trim() && (
         <WarningBanner>
           Shop name is empty. Printed memos will look incomplete.{" "}
@@ -132,7 +155,11 @@ export function Home() {
             <Bi k="lastBackup" />
           </p>
           <p className="mt-2 text-2xl font-semibold text-gray-900">{formatLastBackupAt(backupAt)}</p>
-          <p className="mt-1 text-xs text-slate-500">Automatic copy stays in this browser. This button saves a file.</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {isDesktop()
+              ? "A copy sits beside the shop file in this app. This button saves another file you can keep."
+              : "Automatic copy stays in this browser. This button saves a file."}
+          </p>
           <button type="button" className="btn-secondary mt-3" disabled={backupBusy} onClick={() => void saveBackup()}>
             {backupBusy ? "Saving…" : <Bi k="saveBackup" />}
           </button>

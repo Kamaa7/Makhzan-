@@ -4,6 +4,7 @@ import { Field, PageHeader, WarningBanner } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { countSales, downloadDbFile, replaceDb, updateStoreProfile } from "../db";
+import { desktopShopFolder, isDesktop } from "../lib/desktop";
 import { CURRENCIES, getCurrency } from "../lib/money";
 
 export function StoreProfilePage() {
@@ -21,6 +22,7 @@ export function StoreProfilePage() {
   const [busy, setBusy] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [saleCount, setSaleCount] = useState(0);
+  const [shopFolder, setShopFolder] = useState("");
 
   useEffect(() => {
     if (!profile) return;
@@ -34,6 +36,11 @@ export function StoreProfilePage() {
       currency: profile.currency || "INR",
     });
   }, [profile, user]);
+
+  useEffect(() => {
+    if (!isDesktop()) return;
+    void desktopShopFolder().then(setShopFolder).catch(() => setShopFolder(""));
+  }, []);
 
   useEffect(() => {
     try {
@@ -146,10 +153,19 @@ export function StoreProfilePage() {
       <div className="card space-y-3">
         <h2 className="text-lg font-semibold text-gray-900">Backup</h2>
         <p className="text-sm text-slate-500">
-          Everything is stored in this browser. Download a .db file to keep a copy, or import one to restore.
+          {isDesktop()
+            ? "The shop file stays in this app’s folder, with a backup beside it. Download a .db file to keep another copy, or import one to restore."
+            : "Everything is stored in this browser. Download a .db file to keep a copy, or import one to restore."}
         </p>
+        {shopFolder ? <p className="break-all text-xs text-slate-500">{shopFolder}</p> : null}
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn-secondary" onClick={() => downloadDbFile()}>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => {
+              void downloadDbFile().catch((err) => push(err instanceof Error ? err.message : "Could not save backup", "error"));
+            }}
+          >
             Download database
           </button>
           <label className="btn-secondary cursor-pointer">

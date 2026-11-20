@@ -60,7 +60,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const backup = async () => {
     setBackupBusy(true);
     try {
-      await saveKeeperBackup();
+      const saved = await saveKeeperBackup();
+      if (!saved) return;
       push("Backup file downloaded", "success");
     } catch (err) {
       push(err instanceof Error ? err.message : "Could not save backup", "error");

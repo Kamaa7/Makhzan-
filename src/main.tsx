@@ -1,6 +1,7 @@
 import { Component, StrictMode, type ErrorInfo, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter, HashRouter } from "react-router-dom";
+import { isDesktop } from "./lib/desktop";
 import { App } from "./App";
 import { BootScreen } from "./components/BootScreen";
 import { AuthProvider } from "./context/AuthContext";
@@ -39,11 +40,13 @@ class BootErrorBoundary extends Component<{ children: ReactNode }, { error: Erro
 const root = document.getElementById("root");
 if (!root) throw new Error("Root element not found");
 
+const Router = isDesktop() ? HashRouter : BrowserRouter;
+
 createRoot(root).render(
   <StrictMode>
     <BootErrorBoundary>
       <DbProvider>
-        <BrowserRouter>
+        <Router>
           <AuthProvider>
             <LanguageProvider>
               <ToastProvider>
@@ -51,7 +54,7 @@ createRoot(root).render(
               </ToastProvider>
             </LanguageProvider>
           </AuthProvider>
-        </BrowserRouter>
+        </Router>
       </DbProvider>
     </BootErrorBoundary>
   </StrictMode>,

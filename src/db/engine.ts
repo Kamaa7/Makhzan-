@@ -1,5 +1,13 @@
 import type { Database, SqlJsStatic } from "sql.js";
 import wasmUrl from "sql.js/dist/sql-wasm.wasm?url";
+import {
+  desktopBackupIfCurrent,
+  desktopComparePut,
+  desktopForcePut,
+  desktopReadShop,
+  desktopSaveCopy,
+  isDesktop,
+} from "../lib/desktop";
 import schemaSql from "./schema.sql?raw";
 
 const IDB_NAME = "makhzan";
@@ -19,7 +27,7 @@ class ShopChangedError extends Error {
 }
 
 function isShopChangedError(err: unknown): boolean {
-  return err instanceof ShopChangedError;
+  return err instanceof ShopChangedError || (err instanceof Error && err.name === "ShopChangedError");
 }
 
 let SQL: SqlJsStatic | null = null;
@@ -213,18 +221,18 @@ export async function initDb(): Promise<void> {
   if (db) return;
   watchOtherWindows();
   const sql = await getSql();
-  const saved = await idbReadSnapshot();
+  const saved = await readSnapshot();
   db = openShop(sql, saved.bytes);
   loadedGeneration = saved.generation;
   db.exec(schemaSql);
   const migrated = migrateSalesRoundOff(db);
   if (!saved.bytes || migrated) {
     try {
-      publishGeneration(await idbCompareAndPut(db.export(), loadedGeneration));
+      publishGeneration(await compareAndPut(db.export(), loadedGeneration));
     } catch (err) {
       if (!isShopChangedError(err)) throw err;
       db.close();
-      const latest = await idbReadSnapshot();
+      const latest = await readSnapshot();
       if (!latest.bytes) throw err;
       db = openShop(sql, latest.bytes);
       loadedGeneration = latest.generation;
@@ -244,7 +252,7 @@ export function persistDb(): Promise<void> {
     if (stale) throw new ShopChangedError();
     const bytes = getDb().export();
     try {
-      publishGeneration(await idbCompareAndPut(bytes, loadedGeneration));
+      publishGeneration(await compareAndPut(bytes, loadedGeneration));
     } catch (err) {
       if (isShopChangedError(err)) markStale();
       throw err;
@@ -315,7 +323,7 @@ export function refreshAutoBackup(): Promise<void> {
     if (stale) return;
     const bytes = getDb().export();
     const at = new Date().toISOString();
-    const wrote = await idbPutBackupIfCurrent(bytes, at, loadedGeneration);
+    const wrote = await backupIfCurrent(bytes, at, loadedGeneration);
     if (!wrote) {
       markStale();
       return;
@@ -328,10 +336,11 @@ export function refreshAutoBackup(): Promise<void> {
   return run;
 }
 
-/** Download the live database (not a stale auto-copy), then refresh Last backup. */
-export async function saveKeeperBackup(): Promise<void> {
-  downloadDbFile(`makhzan-backup-${localDateStamp()}.db`);
-  await refreshAutoBackup();
+/** Download the live database (not a stale auto-copy), then refresh Last backup. False if the save dialog is cancelled. */
+export async function saveKeeperBackup(): Promise<boolean> {
+  const saved = await downloadDbFile(`makhzan-backup-${localDateStamp()}.db`);
+  if (saved) await refreshAutoBackup();
+  return saved;
 }
 
 export function allRows(sql: string, params: unknown[] = []): Record<string, unknown>[] {
@@ -380,18 +389,40 @@ export async function replaceDb(bytes: Uint8Array): Promise<void> {
   db?.close();
   db = next;
   stale = false;
-  publishGeneration(await idbForcePut(db.export()));
+  publishGeneration(await forcePut(db.export()));
   await refreshAutoBackup();
 }
 
-export function downloadDbFile(filename = "makhzan.db"): void {
+export async function downloadDbFile(filename = "makhzan.db"): Promise<boolean> {
   const bytes = exportDbBytes();
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
+  if (isDesktop()) return desktopSaveCopy(copy, filename);
   const blob = new Blob([copy], { type: "application/octet-stream" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
+  return true;
+}
+
+async function readSnapshot(): Promise<{ bytes: Uint8Array | null; generation: number }> {
+  if (isDesktop()) return desktopReadShop();
+  return idbReadSnapshot();
+}
+
+function compareAndPut(bytes: Uint8Array, expected: number): Promise<number> {
+  if (isDesktop()) return desktopComparePut(bytes, expected);
+  return idbCompareAndPut(bytes, expected);
+}
+
+function forcePut(bytes: Uint8Array): Promise<number> {
+  if (isDesktop()) return desktopForcePut(bytes);
+  return idbForcePut(bytes);
+}
+
+function backupIfCurrent(bytes: Uint8Array, at: string, expected: number): Promise<boolean> {
+  if (isDesktop()) return desktopBackupIfCurrent(expected);
+  return idbPutBackupIfCurrent(bytes, at, expected);
 }
