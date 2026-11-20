@@ -2,6 +2,7 @@ import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
 import { useState, type FormEvent } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { AuthShell } from "../components/AuthShell";
+import { GoogleMark } from "../components/GoogleMark";
 import { useAuth } from "../context/AuthContext";
 import { useDb } from "../context/DbContext";
 import { useToast } from "../context/ToastContext";
@@ -108,7 +109,7 @@ export function SignIn() {
         className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50"
         onClick={() => push("Google sign-in is not available in this local shop build.", "error")}
       >
-        <img src="https://www.google.com/favicon.ico" alt="" className="h-4 w-4" />
+        <GoogleMark />
         Continue with Google
       </button>
     </AuthShell>
